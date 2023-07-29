@@ -1,5 +1,3 @@
-//Vertex Shader
-
 
 struct Uniforms {
 iMouse: vec4<f32>,
@@ -39,27 +37,17 @@ fn vs_main(
 	return out;
 }
 
-fn smoothedCircle(pos : vec2<f32> ,size:f32,smoothFactor:f32,uv:vec2<f32>) -> f32{
-
-    let distanceToCircleOrigo:f32 = distance(pos,uv);
-    
-    //why do we need 1.0
-    //because smoothStep returns if 1 if x is bigger than a and b in a,b,x
-    //when we define a circle , distances smaller than size should be 1, 
-    //so we need to invert it.
-    
-    //rule to remember , smoothstep a b x , x larger than ab then 1..
-    return (1.0-smoothstep(size,size+smoothFactor,distanceToCircleOrigo));
-
-}
-
 //Fragment Shader
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-	let smoo = smoothedCircle(vec2<f32>(uniforms.iMouse.x ,uniforms.iMouse.y + sin(uniforms.iTime*0.3)*0.66),0.2,0.1,in.uv) + 0.25;
-	let texSample : vec4<f32> = textureSample(t_diffuse,s_diffuse,in.uv);
-	return vec4<f32>(in.color*smoo,1.0) + texSample;
+
+     //reading with distortion
+     let dist_factor = textureSample(t_diffuse,s_diffuse,in.uv).a;
+     let uv:vec2f = in.uv + vec2f(sin(in.uv.x*uniforms.iTime*0.003 + in.uv.y*5.3 + uniforms.iTime*5.4)*(0.01 + dist_factor),
+     sin(in.uv.y*uniforms.iTime*0.003 + in.uv.y*8.3 + uniforms.iTime*6.4)*(0.01 + dist_factor));
+	let texSample : vec4<f32> = textureSample(t_diffuse,s_diffuse,uv);
+	return texSample;
 }
 
 
