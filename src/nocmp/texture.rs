@@ -77,4 +77,60 @@ impl Texture {
         Ok(Self{texture,sampler,view:texture_view})
     }
 
+    /*
+   todo , understand more the relationship between layouts and bind groups
+   and how often do we need them etc.
+   the bind group binds to the texture, so we need one per texture(?)
+   the layout can probably be used among all bind groups sharing layout,
+   is there a big perf hit to just create new layouts?
+     */
+    pub fn create_default_bind_group(
+        &self,
+        device: &wgpu::Device,
+        label:Option<&str>
+    ) -> Result<(wgpu::BindGroupLayout,wgpu::BindGroup)> {
+
+        let bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float {
+                                filterable:true
+                            },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label,
+            });
+        let bind_group = device.create_bind_group(
+            &wgpu::BindGroupDescriptor {
+                layout: &bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&self.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    }
+                ],
+                label,
+            }
+        );
+        Ok((bind_group_layout, bind_group))
+    }
+
 }

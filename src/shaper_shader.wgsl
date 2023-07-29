@@ -56,7 +56,7 @@ fn smoothedCircle(pos : vec2<f32> ,size:f32,smoothFactor:f32,uv:vec2<f32>) -> f3
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-	let smoo = smoothedCircle(vec2<f32>(uniforms.iMouse.x + sin(uniforms.iTime*0.3)*0.66,uniforms.iMouse.y),0.2,0.1,in.uv) + 0.25;
+	let smoo = smoothedCircle(vec2<f32>(uniforms.iMouse.x ,uniforms.iMouse.y + sin(uniforms.iTime*0.3)*0.66),0.2,0.1,in.uv) + 0.25;
 	let texSample : vec4<f32> = textureSample(t_diffuse,s_diffuse,in.uv);
 	return vec4<f32>(in.color*smoo,1.0) + texSample;
 }

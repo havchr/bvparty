@@ -169,6 +169,7 @@ struct State {
     num_indices: u32,
     texture_rtt:wgpu::Texture,
     diffuse_bind_group:wgpu::BindGroup,
+    rtt_bind_group:wgpu::BindGroup,
 
 }
 
@@ -190,17 +191,6 @@ impl State {
         // The surface needs to live as long as the window that created
         // it , State owns the window , sol this should be safe?.. I guess.
         let surface = unsafe{ instance.create_surface(&window) }.unwrap();
-
-
-        //load image
-        let diffuse_bytes = include_bytes!("diffuse.png");
-        let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
-
-
-        let diffuse_rgba = diffuse_image.to_rgba8();
-
-        use image::GenericImageView;
-        let dimensions = diffuse_image.dimensions();
 
 
         let adapter = instance.request_adapter(
@@ -225,53 +215,8 @@ impl State {
             None,
         ).await.unwrap();
 
-
-
-
-        let texture_bind_group_layout = 
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float {
-                                filterable:true
-                            },
-                        },
-                        count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-                ],
-                label: Some("texture_bind_group_layout"),
-            });
-
         let diffyn = nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing").unwrap();
-        let diffuse_bind_group = device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
-                layout: &texture_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&diffyn.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&diffyn.sampler),
-                    }
-                ],
-                label: Some("diffuse_bind_group"),
-            }
-        );
-
-
+        let (texture_bind_group_layout,diffuse_bind_group) = diffyn.create_default_bind_group(&device,Some("diffuse bind group")).unwrap();
 
         let surface_caps = surface.get_capabilities(&adapter);
 
@@ -292,6 +237,7 @@ impl State {
 
         //let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let shader = device.create_shader_module(wgpu::include_wgsl!("shaper_shader.wgsl"));
+        let shader2 = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
 
 
@@ -337,7 +283,7 @@ impl State {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
                     &uniform_bind_group_layout,
-                    &texture_bind_group_layout,
+                   &texture_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
             });
@@ -346,14 +292,14 @@ impl State {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
+                module: &shader2,
                 entry_point: "vs_main",
                 buffers:&[
                     Vertex::descy(),
                 ],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
+                module: &shader2,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
@@ -402,9 +348,70 @@ impl State {
 
         let texture_rtt = device.create_texture(&texture_descriptor_rtt);
 
+
+        let rtt_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float {
+                                filterable:true
+                            },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label: Some("rtt_bind_group_layout"),
+            });
+
+        let sampler_rtt = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u : wgpu::AddressMode::ClampToEdge,
+            address_mode_v : wgpu::AddressMode::ClampToEdge,
+            address_mode_w : wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+        let rtt_bind_group = device.create_bind_group(
+            &wgpu::BindGroupDescriptor {
+                layout: &rtt_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&texture_rtt.create_view(&wgpu::TextureViewDescriptor::default())),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&sampler_rtt),
+                    }
+                ],
+                label: Some("rtt_bind_group"),
+            }
+        );
+
+        let render_pipeline_layout_rtt=
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout rtt"),
+                bind_group_layouts: &[
+                    &uniform_bind_group_layout,
+                    &texture_bind_group_layout,
+                ],
+                push_constant_ranges: &[],
+            });
         let render_pipeline_rtt = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline RTT"),
-            layout: Some(&render_pipeline_layout),
+            layout: Some(&render_pipeline_layout_rtt),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
@@ -480,6 +487,7 @@ impl State {
             window,
             texture_rtt,
             diffuse_bind_group,
+            rtt_bind_group
         }
     }
 
@@ -516,7 +524,6 @@ impl State {
         });
 
         //I am trying to render to texture but it says my format is just too wrong
-        /*
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("My First Render Pass to RTT"),
@@ -537,15 +544,14 @@ impl State {
             });
     
 
-            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_pipeline(&self.render_pipeline_rtt);
             render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
+            render_pass.set_bind_group(1,&self.diffuse_bind_group,&[]);
             render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices,0,0..1);
             //render_pass.draw(0..self.num_vertices,0..1);
         }
-        */
-
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -569,12 +575,13 @@ impl State {
 
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
-            render_pass.set_bind_group(1,&self.diffuse_bind_group,&[]);
+            render_pass.set_bind_group(1,&self.rtt_bind_group,&[]);
             render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices,0,0..1);
             //render_pass.draw(0..self.num_vertices,0..1);
         }
+
 
 
         //submit will accept anythingthatimplements IntoIter
