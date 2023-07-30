@@ -67,11 +67,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let mouse_x_in_01 = uniforms.iMouse.x/uniforms.iResolution.x;
     let mouse_y_in_01 = uniforms.iMouse.y/uniforms.iResolution.y;
 
-    //var smoo :f32 = smoothedCircle(vec2f(0.5,0.5),0.175,0.1,in.uv);
-    var smoo :f32 = smoothedCircle(vec2f(uniforms.iMouse.x/uniforms.iResolution.x,uniforms.iMouse.y/uniforms.iResolution.y),0.175,0.1,in.uv);
+    var smoo :f32 = smoothedCircle(vec2f(0.5,0.5),0.175,0.1,in.uv);
     //let smootheppa = smoothstep(colorSpewingBallRadius,colorSpewingBallRadiusOuterEdge,distance(in.uv.xy,uniforms.iMouse.xy/uniforms.iResolution.xy));
     //Something is wrong here,but what is it?!?
-    let smootheppa = smoothstep(colorSpewingBallRadius,colorSpewingBallRadiusOuterEdge,distance(vec2f(in.uv.x,1.0-in.uv.y),uniforms.iMouse.xy/uniforms.iResolution.xy));
+    let smootheppa = smoothstep(colorSpewingBallRadius,colorSpewingBallRadiusOuterEdge,distance(in.uv,uniforms.iMouse.xy/uniforms.iResolution.xy));
     let mouseInput = (1.0- smootheppa)*uniforms.iMouse.z;
 
 
@@ -91,7 +90,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     //adjustments+=mouseInput*0.01; //inputting mouse input..
     }
     //mouse input to alpha channel - used in buffer A to modify distortion strength.
-    return vec4(adjustments +vec3f(0.0,mouse_x_in_01,mouse_y_in_01),mouseInput*0.0001);
+    return vec4(adjustments,mouseInput*0.0001);
 
 }
 

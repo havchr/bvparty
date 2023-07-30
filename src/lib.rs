@@ -22,8 +22,8 @@ struct Vertex {
 #[derive(Debug,Copy,Clone,bytemuck::Pod,bytemuck::Zeroable)]
 struct Uniforms{
     iMouse:[f32;4],
-    iTime:f32,
     iResolution:[f32;2],
+    iTime:f32,
     pad1:f32,
 }
 
@@ -249,7 +249,7 @@ impl State {
         let diffyn = nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing").unwrap();
         let (texture_bind_group_layout,diffuse_bind_group) = diffyn.create_default_bind_group(&device,Some("diffuse bind group")).unwrap();
 
-        let test_texture = nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("imagetest.png"),"testing imagetest").unwrap();
+        let test_texture = nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing imagetest").unwrap();
         let (texture_bind_group_layout,diffuse2_bind_group) = test_texture.create_default_bind_group(&device,Some("image test bind group")).unwrap();
 
         let surface_caps = surface.get_capabilities(&adapter);
