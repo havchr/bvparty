@@ -90,7 +90,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     //adjustments+=mouseInput*0.01; //inputting mouse input..
     }
     //mouse input to alpha channel - used in buffer A to modify distortion strength.
-    return vec4(adjustments,mouseInput*0.0001);
+    return vec4(adjustments * texCol,mouseInput*0.0001);
 
 }
 

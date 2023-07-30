@@ -175,9 +175,9 @@ struct State {
     window: Window,
     num_indices: u32,
     texture_rtt:wgpu::Texture,
-    diffuse_bind_group:wgpu::BindGroup,
     diffuse2_bind_group:wgpu::BindGroup,
     rtt_bind_group:wgpu::BindGroup,
+    dif_tex_1: nocmp::texture::Texture,
 
 }
 
@@ -246,11 +246,15 @@ impl State {
             None,
         ).await.unwrap();
 
-        let diffyn = nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing").unwrap();
-        let (texture_bind_group_layout,diffuse_bind_group) = diffyn.create_default_bind_group(&device,Some("diffuse bind group")).unwrap();
+        let dif_tex_1= nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing").unwrap();
+        //let (texture_bind_group_layout,diffuse_bind_group) = diffyn.create_default_bind_group(&device,Some("diffuse bind group")).unwrap();
 
         let test_texture = nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing imagetest").unwrap();
         let (texture_bind_group_layout,diffuse2_bind_group) = test_texture.create_default_bind_group(&device,Some("image test bind group")).unwrap();
+
+
+        let rtt_nocmp_texture= nocmp::texture::Texture::create_rtt_texture(1024,1024,&device,Some("rtt_nocmp_test")).unwrap();
+        //let (rtt_bind_group_layout,rtt_bind_group) = test_texture.create_default_bind_group(&device,Some("image test bind group")).unwrap();
 
         let surface_caps = surface.get_capabilities(&adapter);
 
@@ -271,9 +275,10 @@ impl State {
 
         //let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let shader = device.create_shader_module(wgpu::include_wgsl!("shaper_shader.wgsl"));
-        let shader2 = device.create_shader_module(wgpu::include_wgsl!("shader_buffer_b.wgsl"));
+        let shader2 = device.create_shader_module(wgpu::include_wgsl!("shadertoys/shader_buffer_b.wgsl"));
 
 
+//        let shadertoy_buffer_b = nocmp::shadertoy_buffer::ShaderToylikeBuffer::create(&device,&texture_bind_group_layout,&config).unwrap();
 
         let uniforms = Uniforms::new();
 
@@ -520,9 +525,9 @@ impl State {
             uniforms,
             window,
             texture_rtt,
-            diffuse_bind_group,
             diffuse2_bind_group,
-            rtt_bind_group
+            rtt_bind_group,
+            dif_tex_1
         }
     }
 
@@ -581,7 +586,8 @@ impl State {
 
             render_pass.set_pipeline(&self.render_pipeline_rtt);
             render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
-            render_pass.set_bind_group(1,&self.diffuse_bind_group,&[]);
+            //render_pass.set_bind_group(1,&self.diffuse_bind_group,&[]);
+            render_pass.set_bind_group(1,&self.dif_tex_1.bind_group,&[]);
             render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices,0,0..1);
