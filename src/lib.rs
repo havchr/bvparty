@@ -1,3 +1,5 @@
+mod nocmp;
+
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -21,9 +23,8 @@ struct Vertex {
 struct Uniforms{
     iMouse:[f32;4],
     iTime:f32,
+    iResolution:[f32;2],
     pad1:f32,
-    pad2:f32,
-    pad3:f32,
 }
 
 impl Uniforms{
@@ -31,9 +32,8 @@ impl Uniforms{
         Uniforms{
             iMouse: [0.0,0.0,0.0,0.0],
             iTime: 0.0,
+            iResolution: [0.0,0.0],
             pad1: 0.0,
-            pad2: 0.0,
-            pad3: 0.0,
         }
     }
 }
@@ -115,6 +115,15 @@ pub async fn run() {
                             WindowEvent::Resized(physical_size) => {
                                 state.resize(*physical_size);
                             }
+                        WindowEvent::CursorMoved {position,..} => {
+                            state.update_mousexy(position.x,position.y);
+                        }
+
+                        WindowEvent::MouseInput{state:element_state,button,..} => {
+                            //handle mouse input event...
+                            state.update_mouse_event(element_state,button);
+                        }
+
                         WindowEvent::ScaleFactorChanged {new_inner_size,..} => {
                             //new_inner_size is &&mut so we have to deref twice.
                             state.resize(**new_inner_size);
@@ -167,11 +176,36 @@ struct State {
     num_indices: u32,
     texture_rtt:wgpu::Texture,
     diffuse_bind_group:wgpu::BindGroup,
+    diffuse2_bind_group:wgpu::BindGroup,
+    rtt_bind_group:wgpu::BindGroup,
 
 }
 
 impl State {
-    //Creating some ofthe wgpu types requires async code
+
+    pub fn update_mousexy(&mut self, mx: f64, my: f64) {
+        self.uniforms.iMouse[0] = mx as f32;
+        self.uniforms.iMouse[1] = my as f32;
+    }
+
+    pub fn update_mouse_event(&mut self, element_state:&ElementState , button: &MouseButton) {
+        match(element_state,button)  {
+            (ElementState::Pressed, MouseButton::Left) => {
+                self.uniforms.iMouse[2] = 1.0;
+            }
+            (ElementState::Released, MouseButton::Left) => {
+                self.uniforms.iMouse[2] = 0.0;
+            }
+            (ElementState::Pressed, MouseButton::Right) => {
+                self.uniforms.iMouse[3] = 1.0;
+            }
+            (ElementState::Released, MouseButton::Right) => {
+                self.uniforms.iMouse[3] = 0.0;
+            }
+            _ => {}
+        }
+    }
+    //Creating some of the wgpu types requires async code
     async fn new(window: Window) -> Self {
         let size = window.inner_size();
 
@@ -190,15 +224,6 @@ impl State {
         let surface = unsafe{ instance.create_surface(&window) }.unwrap();
 
 
-        //load image
-        let diffuse_bytes = include_bytes!("diffuse.png");
-        let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
-        let diffuse_rgba = diffuse_image.to_rgba8();
-
-        use image::GenericImageView;
-        let dimensions = diffuse_image.dimensions();
-
-
         let adapter = instance.request_adapter(
             &wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -207,7 +232,7 @@ impl State {
             },
         ).await.unwrap();
 
-        //let us create the deviceand queue
+        //let us create the device and queue
         let(device,queue) = adapter.request_device(
             &wgpu::DeviceDescriptor {
                 features: wgpu::Features::empty(),
@@ -221,98 +246,11 @@ impl State {
             None,
         ).await.unwrap();
 
+        let diffyn = nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing").unwrap();
+        let (texture_bind_group_layout,diffuse_bind_group) = diffyn.create_default_bind_group(&device,Some("diffuse bind group")).unwrap();
 
-        let diffuse_texture_size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            depth_or_array_layers: 1,
-        };
-
-        let diffuse_texture = device.create_texture(
-            &wgpu::TextureDescriptor {
-                size: diffuse_texture_size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                label: Some("Diffuse_texture"),
-                view_formats: &[],
-            }
-        );
-
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &diffuse_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &diffuse_rgba,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * dimensions.0),
-                rows_per_image: Some(dimensions.1),
-            },
-            diffuse_texture_size,
-        );
-
-        let diffuse_texture_view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u : wgpu::AddressMode::ClampToEdge,
-            address_mode_v : wgpu::AddressMode::ClampToEdge,
-            address_mode_w : wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-
-
-
-        let texture_bind_group_layout = 
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float {
-                                filterable:true
-                            },
-                        },
-                        count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-                ],
-                label: Some("texture_bind_group_layout"),
-            });
-
-        let diffuse_bind_group = device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
-                layout: &texture_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
-                    }
-                ],
-                label: Some("diffuse_bind_group"),
-            }
-        );
-
-
+        let test_texture = nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("imagetest.png"),"testing imagetest").unwrap();
+        let (texture_bind_group_layout,diffuse2_bind_group) = test_texture.create_default_bind_group(&device,Some("image test bind group")).unwrap();
 
         let surface_caps = surface.get_capabilities(&adapter);
 
@@ -333,6 +271,7 @@ impl State {
 
         //let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let shader = device.create_shader_module(wgpu::include_wgsl!("shaper_shader.wgsl"));
+        let shader2 = device.create_shader_module(wgpu::include_wgsl!("shader_buffer_b.wgsl"));
 
 
 
@@ -378,7 +317,7 @@ impl State {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
                     &uniform_bind_group_layout,
-                    &texture_bind_group_layout,
+                   &texture_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
             });
@@ -387,14 +326,14 @@ impl State {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
+                module: &shader2,
                 entry_point: "vs_main",
                 buffers:&[
                     Vertex::descy(),
                 ],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
+                module: &shader2,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
@@ -443,9 +382,70 @@ impl State {
 
         let texture_rtt = device.create_texture(&texture_descriptor_rtt);
 
+
+        let rtt_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float {
+                                filterable:true
+                            },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label: Some("rtt_bind_group_layout"),
+            });
+
+        let sampler_rtt = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u : wgpu::AddressMode::ClampToEdge,
+            address_mode_v : wgpu::AddressMode::ClampToEdge,
+            address_mode_w : wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+        let rtt_bind_group = device.create_bind_group(
+            &wgpu::BindGroupDescriptor {
+                layout: &rtt_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&texture_rtt.create_view(&wgpu::TextureViewDescriptor::default())),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&sampler_rtt),
+                    }
+                ],
+                label: Some("rtt_bind_group"),
+            }
+        );
+
+        let render_pipeline_layout_rtt=
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout rtt"),
+                bind_group_layouts: &[
+                    &uniform_bind_group_layout,
+                    &texture_bind_group_layout,
+                ],
+                push_constant_ranges: &[],
+            });
         let render_pipeline_rtt = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline RTT"),
-            layout: Some(&render_pipeline_layout),
+            layout: Some(&render_pipeline_layout_rtt),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
@@ -521,6 +521,8 @@ impl State {
             window,
             texture_rtt,
             diffuse_bind_group,
+            diffuse2_bind_group,
+            rtt_bind_group
         }
     }
 
@@ -533,6 +535,8 @@ impl State {
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
+            self.uniforms.iResolution[0] = new_size.width as f32;
+            self.uniforms.iResolution[1] = new_size.height as f32;
             self.surface.configure(&self.device,&self.config);
         }
     }
@@ -543,8 +547,6 @@ impl State {
 
     fn update(&mut self,delta_time: instant::Duration) {
         self.uniforms.iTime += delta_time.as_secs_f32();
-        self.uniforms.iMouse[0] = 0.5;
-        self.uniforms.iMouse[1] = 0.5;
         self.queue.write_buffer(&self.uniform_buffer,0,bytemuck::cast_slice(&[self.uniforms]));
     }
 
@@ -557,7 +559,6 @@ impl State {
         });
 
         //I am trying to render to texture but it says my format is just too wrong
-        /*
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("My First Render Pass to RTT"),
@@ -578,14 +579,14 @@ impl State {
             });
     
 
-            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_pipeline(&self.render_pipeline_rtt);
             render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
+            render_pass.set_bind_group(1,&self.diffuse_bind_group,&[]);
             render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices,0,0..1);
             //render_pass.draw(0..self.num_vertices,0..1);
         }
-        */
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -605,16 +606,19 @@ impl State {
                 })],
                 depth_stencil_attachment: None,
             });
-    
+
+            println!("mouser {},{}",self.uniforms.iMouse[0],self.uniforms.iMouse[1]);
+            println!("screener {},{}",self.uniforms.iResolution[0],self.uniforms.iResolution[1]);
 
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
-            render_pass.set_bind_group(1,&self.diffuse_bind_group,&[]);
+            render_pass.set_bind_group(1,&self.rtt_bind_group,&[]);
             render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices,0,0..1);
             //render_pass.draw(0..self.num_vertices,0..1);
         }
+
 
 
         //submit will accept anythingthatimplements IntoIter
