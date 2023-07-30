@@ -6,8 +6,6 @@ pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
-    pub bind_group_layout: wgpu::BindGroupLayout,
-    pub bind_group: wgpu::BindGroup,
 }
 
 impl Texture {
@@ -76,8 +74,7 @@ impl Texture {
             ..Default::default()
         });
 
-        let (bind_group_layout, bind_group) = create_default_bind_group(device,&sampler,&texture_view, Some("default bind group")).unwrap();
-        Ok(Self { texture, sampler, view: texture_view,bind_group,bind_group_layout })
+        Ok(Self { texture, sampler, view: texture_view})
     }
 
     pub fn create_rtt_texture(width: u32, height: u32, device: &wgpu::Device, label: Option<&str>)
@@ -99,32 +96,6 @@ impl Texture {
         };
 
         let texture_rtt = device.create_texture(&texture_descriptor_rtt);
-/*
-        let rtt_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float {
-                                filterable: true
-                            },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-                label: Some("rtt_bind_group_layout"),
-            });
- */
 
         let sampler_rtt = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -136,87 +107,74 @@ impl Texture {
             ..Default::default()
         });
         let texture_view = texture_rtt.create_view(&wgpu::TextureViewDescriptor::default());
-        /*
-        let rtt_bind_group = device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
-                layout: &rtt_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&texture_rtt.create_view(&wgpu::TextureViewDescriptor::default())),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&sampler_rtt),
-                    }
-                ],
-                label: Some("rtt_bind_group"),
-            }
-        );
-        */
-
-        let(bind_group_layout,bind_group) = create_default_bind_group(device,&sampler_rtt,&texture_view,Some("rtt_bind_group")).unwrap();
-        Ok(Self { texture:texture_rtt, sampler:sampler_rtt, view: texture_view,bind_group,bind_group_layout })
+        Ok(Self { texture:texture_rtt, sampler:sampler_rtt, view: texture_view})
     }
 
-    /*
-   todo , understand more the relationship between layouts and bind groups
-   and how often do we need them etc.
-   the bind group binds to the texture, so we need one per texture(?)
-   the layout can probably be used among all bind groups sharing layout,
-   is there a big perf hit to just create new layouts?
-     */
-    pub fn create_default_bind_group(
-        &self,
-        device: &wgpu::Device,
-        label: Option<&str>,
-    ) -> Result<(wgpu::BindGroupLayout, wgpu::BindGroup)> {
-        ;
-        Ok((create_default_bind_group(device,&self.sampler,&self.view,label).unwrap()))
-    }
 }
 
-fn create_default_bind_group(device: &Device,sampler: &wgpu::Sampler,texture_view: &wgpu::TextureView, label: Option<&str>) -> Result<(wgpu::BindGroupLayout, wgpu::BindGroup)> {
+/*
+so, bind group and bind group layout seems to describe
+"multi-texturing" in old school terms.
+I am guessing this must match with the shader as well,i.e if
+you say 3 textures, and your shader reads 4, mayhem!?!?
+ */
+pub fn setup_texture_stage(device: &Device, textures: &[&Texture], label: Option<&str> )
+                           -> Result<(wgpu::BindGroupLayout,wgpu::BindGroup)> {
+
+    let mut bind_group_entries: Vec<wgpu::BindGroupEntry> = Vec::new();
+    let mut bind_group_layout_entries: Vec<wgpu::BindGroupLayoutEntry> = Vec::new();
+    for i in 0..textures.len() {
+
+       let layout_entry_1 = wgpu::BindGroupLayoutEntry {
+        binding: i as u32,
+           visibility: wgpu::ShaderStages::FRAGMENT,
+           ty: wgpu::BindingType::Texture {
+               multisampled: false,
+               view_dimension: wgpu::TextureViewDimension::D2,
+               sample_type: wgpu::TextureSampleType::Float {
+                   filterable: true
+               },
+           },
+           count: None,
+       };
+
+        let layout_entry_2 = wgpu::BindGroupLayoutEntry {
+            binding: (i+1) as u32,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            count: None,
+        };
+
+        let entry_1  = wgpu::BindGroupEntry {
+            binding: i as u32,
+            resource: wgpu::BindingResource::TextureView(&textures[i].view),
+        };
+        let entry_2  = wgpu::BindGroupEntry {
+            binding: (i+1) as u32,
+            resource: wgpu::BindingResource::Sampler(&textures[i].sampler),
+        };
+        bind_group_entries.push(entry_1);
+        bind_group_entries.push(entry_2);
+        bind_group_layout_entries.push(layout_entry_1);
+        bind_group_layout_entries.push(layout_entry_2);
+    }
+
+
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    multisampled: false,
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    sample_type: wgpu::TextureSampleType::Float {
-                        filterable: true
-                    },
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
-        ],
+        entries: &bind_group_layout_entries.as_slice(),
         label,
     });
+
     let bind_group = device.create_bind_group(
         &wgpu::BindGroupDescriptor {
             layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(sampler),
-                }
-            ],
+            entries: &bind_group_entries.as_slice(),
             label,
         }
     );
-    Ok((bind_group_layout, bind_group))
+
+    Ok((bind_group_layout,bind_group))
+
 }
 
 

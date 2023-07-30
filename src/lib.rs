@@ -175,9 +175,11 @@ struct State {
     window: Window,
     num_indices: u32,
     texture_rtt:wgpu::Texture,
-    diffuse2_bind_group:wgpu::BindGroup,
     rtt_bind_group:wgpu::BindGroup,
     dif_tex_1: nocmp::texture::Texture,
+    dif_tex_2: nocmp::texture::Texture,
+    texture_bind_group_layout: wgpu::BindGroupLayout,
+    texture_bind_group: wgpu::BindGroup,
 
 }
 
@@ -247,14 +249,13 @@ impl State {
         ).await.unwrap();
 
         let dif_tex_1= nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing").unwrap();
-        //let (texture_bind_group_layout,diffuse_bind_group) = diffyn.create_default_bind_group(&device,Some("diffuse bind group")).unwrap();
-
-        let test_texture = nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing imagetest").unwrap();
-        let (texture_bind_group_layout,diffuse2_bind_group) = test_texture.create_default_bind_group(&device,Some("image test bind group")).unwrap();
-
-
+        let dif_tex_2= nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing imagetest").unwrap();
         let rtt_nocmp_texture= nocmp::texture::Texture::create_rtt_texture(1024,1024,&device,Some("rtt_nocmp_test")).unwrap();
-        //let (rtt_bind_group_layout,rtt_bind_group) = test_texture.create_default_bind_group(&device,Some("image test bind group")).unwrap();
+
+
+        let (texture_bind_group_layout,texture_bind_group) = nocmp::texture::setup_texture_stage(&device, &[&dif_tex_1], Some("Just one texture")).unwrap();
+       // texture_bind_group_layout: wgpu::BindGroupLayout,
+        //texture_bind_group: wgpu::BindGroup,
 
         let surface_caps = surface.get_capabilities(&adapter);
 
@@ -444,7 +445,7 @@ impl State {
                 label: Some("Render Pipeline Layout rtt"),
                 bind_group_layouts: &[
                     &uniform_bind_group_layout,
-                    &texture_bind_group_layout,
+                    &rtt_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
             });
@@ -525,9 +526,11 @@ impl State {
             uniforms,
             window,
             texture_rtt,
-            diffuse2_bind_group,
+            texture_bind_group,
+            texture_bind_group_layout,
             rtt_bind_group,
-            dif_tex_1
+            dif_tex_1,
+            dif_tex_2
         }
     }
 
@@ -586,8 +589,7 @@ impl State {
 
             render_pass.set_pipeline(&self.render_pipeline_rtt);
             render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
-            //render_pass.set_bind_group(1,&self.diffuse_bind_group,&[]);
-            render_pass.set_bind_group(1,&self.dif_tex_1.bind_group,&[]);
+            render_pass.set_bind_group(1,&self.texture_bind_group,&[]);
             render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices,0,0..1);
