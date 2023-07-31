@@ -178,6 +178,7 @@ struct State {
     rtt_bind_group:wgpu::BindGroup,
     dif_tex_1: nocmp::texture::Texture,
     dif_tex_2: nocmp::texture::Texture,
+    rtt_tex: nocmp::texture::Texture,
     texture_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group: wgpu::BindGroup,
 
@@ -250,12 +251,9 @@ impl State {
 
         let dif_tex_1= nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing").unwrap();
         let dif_tex_2= nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing imagetest").unwrap();
-        let rtt_nocmp_texture= nocmp::texture::Texture::create_rtt_texture(1024,1024,&device,Some("rtt_nocmp_test")).unwrap();
-
+        let rtt_tex= nocmp::texture::Texture::create_rtt_texture(1024,1024,&device,Some("rtt_nocmp_test")).unwrap();
 
         let (texture_bind_group_layout,texture_bind_group) = nocmp::texture::setup_texture_stage(&device, &[&dif_tex_1], Some("Just one texture")).unwrap();
-       // texture_bind_group_layout: wgpu::BindGroupLayout,
-        //texture_bind_group: wgpu::BindGroup,
 
         let surface_caps = surface.get_capabilities(&adapter);
 
@@ -387,58 +385,7 @@ impl State {
         };
 
         let texture_rtt = device.create_texture(&texture_descriptor_rtt);
-
-
-        let rtt_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float {
-                                filterable:true
-                            },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-                label: Some("rtt_bind_group_layout"),
-            });
-
-        let sampler_rtt = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u : wgpu::AddressMode::ClampToEdge,
-            address_mode_v : wgpu::AddressMode::ClampToEdge,
-            address_mode_w : wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-        let rtt_bind_group = device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
-                layout: &rtt_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&texture_rtt.create_view(&wgpu::TextureViewDescriptor::default())),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&sampler_rtt),
-                    }
-                ],
-                label: Some("rtt_bind_group"),
-            }
-        );
+        let (rtt_bind_group_layout,rtt_bind_group) = nocmp::texture::setup_texture_stage(&device,&[&rtt_tex],Some("rtt texture stage")).unwrap();
 
         let render_pipeline_layout_rtt=
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -530,7 +477,8 @@ impl State {
             texture_bind_group_layout,
             rtt_bind_group,
             dif_tex_1,
-            dif_tex_2
+            dif_tex_2,
+            rtt_tex,
         }
     }
 
@@ -561,7 +509,6 @@ impl State {
     fn render(&mut self) -> Result<(),wgpu::SurfaceError> {
         let output= self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let texture_view_rtt = self.texture_rtt.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
@@ -571,7 +518,8 @@ impl State {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("My First Render Pass to RTT"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment{
-                    view: &texture_view_rtt,
+                    //view: &texture_view_rtt,
+                    view: &self.rtt_tex.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
