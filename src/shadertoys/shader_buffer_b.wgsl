@@ -77,20 +77,20 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     //float mouseInput = (1.0-smoothstep(colorSpewingBallRadius,colorSpewingBallRadiusOuterEdge,distance(uv.xy,iMouse.xy/iResolution.xy)))*iMouse.z;
 
     //reading previous frame and diminishing color by a factor : also clamping to keep values from going haywire.
-    var texCol :vec3f = textureSample(t_diffuse,s_diffuse,in.uv).rgb;
+    var texCol :vec3f = textureSample(t_diffuse,s_diffuse,in.uv).rgb - vec3f(0.01,0.01,0.01);
     texCol = clamp(texCol,vec3f(0.0),vec3f(1.0));
-    var adjustments :vec3f  = vec3f(smoo*0.01);
+    var adjustments :vec3f  = vec3f(0.0);
     //var dutchColors : vec3f = (0.5 + 0.5*cos(uniforms.iTime+in.uv.xyx+vec3f(0,2,4)));
 
 
     let dutchColors: vec3<f32> = vec3<f32>(0.5) + vec3<f32>(0.5) * cos(uniforms.iTime + vec3<f32>(in.uv.x, in.uv.x, in.uv.x) + vec3<f32>(0.0, 2.0, 4.0));
     if(mouseInput>0.01){
 
-    adjustments+=dutchColors*mouseInput*0.01; //inputting mouse input..
+    adjustments+=dutchColors*mouseInput*0.1; //inputting mouse input..
     //adjustments+=mouseInput*0.01; //inputting mouse input..
     }
     //mouse input to alpha channel - used in buffer A to modify distortion strength.
-    return vec4(adjustments * texCol,mouseInput*0.0001);
+    return vec4(adjustments + texCol,mouseInput*0.0001);
 
 }
 

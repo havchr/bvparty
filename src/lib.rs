@@ -181,6 +181,10 @@ struct State {
     rtt_tex: nocmp::texture::Texture,
     texture_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group: wgpu::BindGroup,
+    buffer_a: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
+    buffer_b: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
+    buffer_screen: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
+    toylike_uniforms: nocmp::shadertoy_buffer::ShaderToyUniforms,
 
 }
 
@@ -189,21 +193,28 @@ impl State {
     pub fn update_mousexy(&mut self, mx: f64, my: f64) {
         self.uniforms.iMouse[0] = mx as f32;
         self.uniforms.iMouse[1] = my as f32;
+
+        self.toylike_uniforms.uniforms.iMouse[0] = mx as f32;
+        self.toylike_uniforms.uniforms.iMouse[1] = my as f32;
     }
 
     pub fn update_mouse_event(&mut self, element_state:&ElementState , button: &MouseButton) {
         match(element_state,button)  {
             (ElementState::Pressed, MouseButton::Left) => {
                 self.uniforms.iMouse[2] = 1.0;
+                self.toylike_uniforms.uniforms.iMouse[2] = 1.0;
             }
             (ElementState::Released, MouseButton::Left) => {
                 self.uniforms.iMouse[2] = 0.0;
+                self.toylike_uniforms.uniforms.iMouse[2] = 0.0;
             }
             (ElementState::Pressed, MouseButton::Right) => {
                 self.uniforms.iMouse[3] = 1.0;
+                self.toylike_uniforms.uniforms.iMouse[3] = 1.0;
             }
             (ElementState::Released, MouseButton::Right) => {
                 self.uniforms.iMouse[3] = 0.0;
+                self.toylike_uniforms.uniforms.iMouse[3] = 0.0;
             }
             _ => {}
         }
@@ -276,8 +287,32 @@ impl State {
         let shader = device.create_shader_module(wgpu::include_wgsl!("shaper_shader.wgsl"));
         let shader2 = device.create_shader_module(wgpu::include_wgsl!("shadertoys/shader_buffer_b.wgsl"));
 
+        let toylike_uniforms = nocmp::shadertoy_buffer::ShaderToyUniforms::new(&device).unwrap();
 
-//        let shadertoy_buffer_b = nocmp::shadertoy_buffer::ShaderToylikeBuffer::create(&device,&texture_bind_group_layout,&config).unwrap();
+        let buffer_a = nocmp::shadertoy_buffer::ShaderToylikeBuffer::create(
+            &device,
+            &toylike_uniforms,
+            &texture_bind_group_layout,
+            &config,
+            wgpu::include_wgsl!("shadertoys/shader_buffer_a.wgsl")
+        ).unwrap();
+
+        let buffer_b = nocmp::shadertoy_buffer::ShaderToylikeBuffer::create(
+            &device,
+            &toylike_uniforms,
+            &texture_bind_group_layout,
+            &config,
+            wgpu::include_wgsl!("shadertoys/shader_buffer_b.wgsl")
+        ).unwrap();
+
+        let buffer_screen = nocmp::shadertoy_buffer::ShaderToylikeBuffer::create(
+            &device,
+            &toylike_uniforms,
+            &texture_bind_group_layout,
+            &config,
+            wgpu::include_wgsl!("shadertoys/shader_buffer_screen.wgsl")
+        ).unwrap();
+
 
         let uniforms = Uniforms::new();
 
@@ -479,6 +514,11 @@ impl State {
             dif_tex_1,
             dif_tex_2,
             rtt_tex,
+            buffer_a,
+            buffer_b,
+            buffer_screen,
+            toylike_uniforms,
+
         }
     }
 
@@ -493,6 +533,9 @@ impl State {
             self.config.height = new_size.height;
             self.uniforms.iResolution[0] = new_size.width as f32;
             self.uniforms.iResolution[1] = new_size.height as f32;
+
+            self.toylike_uniforms.uniforms.iResolution[0] = new_size.width as f32;
+            self.toylike_uniforms.uniforms.iResolution[1] = new_size.height as f32;
             self.surface.configure(&self.device,&self.config);
         }
     }
@@ -504,78 +547,21 @@ impl State {
     fn update(&mut self,delta_time: instant::Duration) {
         self.uniforms.iTime += delta_time.as_secs_f32();
         self.queue.write_buffer(&self.uniform_buffer,0,bytemuck::cast_slice(&[self.uniforms]));
+
+        self.toylike_uniforms.uniforms.iTime += delta_time.as_secs_f32().max(f32::MIN_POSITIVE);
+        self.toylike_uniforms.push_buffer_to_gfx_card(&self.queue);
     }
 
     fn render(&mut self) -> Result<(),wgpu::SurfaceError> {
         let output= self.surface.get_current_texture()?;
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view_of_surface = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
 
-        //I am trying to render to texture but it says my format is just too wrong
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("My First Render Pass to RTT"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment{
-                    //view: &texture_view_rtt,
-                    view: &self.rtt_tex.view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-    
-
-            render_pass.set_pipeline(&self.render_pipeline_rtt);
-            render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
-            render_pass.set_bind_group(1,&self.texture_bind_group,&[]);
-            render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices,0,0..1);
-            //render_pass.draw(0..self.num_vertices,0..1);
-        }
-
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("My First Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment{
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-
-            println!("mouser {},{}",self.uniforms.iMouse[0],self.uniforms.iMouse[1]);
-            println!("screener {},{}",self.uniforms.iResolution[0],self.uniforms.iResolution[1]);
-
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
-            render_pass.set_bind_group(1,&self.rtt_bind_group,&[]);
-            render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices,0,0..1);
-            //render_pass.draw(0..self.num_vertices,0..1);
-        }
-
-
+        self.buffer_a.render_to_own_buffer(self.buffer_b.get_target_rtt_bindgroup(),&self.toylike_uniforms,&mut encoder);
+        self.buffer_b.render_to_own_buffer(self.buffer_a.get_target_rtt_bindgroup(),&self.toylike_uniforms,&mut encoder);
+        self.buffer_screen.render_to_screen(&view_of_surface,self.buffer_a.get_target_rtt_bindgroup(),&self.toylike_uniforms,&mut encoder);
 
         //submit will accept anythingthatimplements IntoIter
         self.queue.submit(std::iter::once(encoder.finish()));

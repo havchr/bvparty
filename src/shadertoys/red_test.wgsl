@@ -42,12 +42,10 @@ fn vs_main(
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
-     //reading with distortion
-     var dist_factor = textureSample(t_diffuse,s_diffuse,in.uv).a;
-     var uv:vec2f = in.uv;
-     uv.x += sin(in.uv.x*uniforms.iTime*0.003 + in.uv.y*5.3 + uniforms.iTime*5.4)*(0.005 + dist_factor);
-     uv.y += sin(in.uv.y*uniforms.iTime*0.003 + in.uv.y*8.3 + uniforms.iTime*6.4)*(0.005 + dist_factor);
-	let texSample : vec4<f32> = textureSample(t_diffuse,s_diffuse,uv);
+	var texSample : vec4<f32> = textureSample(t_diffuse,s_diffuse,in.uv);
+	texSample.r = 1.0;
+	texSample.g = sin(uniforms.iTime*5.0);
+	texSample.b = uniforms.iMouse[2];
 	return texSample;
 }
 

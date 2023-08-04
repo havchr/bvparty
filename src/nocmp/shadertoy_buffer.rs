@@ -3,6 +3,7 @@ This creates a pipeline with a render-texture like a buffer in shadertoy.
  */
 use anyhow::*;
 use wgpu::util::DeviceExt;
+use crate::nocmp;
 
 #[repr(C)]
 #[derive(Copy,Clone, Debug,bytemuck::Pod, bytemuck::Zeroable)]
@@ -14,11 +15,11 @@ struct Vertex {
 
 #[repr(C)]
 #[derive(Debug,Copy,Clone,bytemuck::Pod,bytemuck::Zeroable)]
-struct Uniforms{
-    iMouse:[f32;4],
-    iResolution:[f32;2],
-    iTime:f32,
-    pad1:f32,
+pub struct Uniforms{
+    pub iMouse:[f32;4],
+    pub iResolution:[f32;2],
+    pub iTime:f32,
+    pub pad1:f32,
 }
 
 impl Uniforms{
@@ -78,29 +79,19 @@ const INDICES: &[u16] = &[
     0,1,2,
     2,1,3
 ];
-pub(crate) struct ShaderToylikeBuffer{
 
-    render_pipeline_rtt: wgpu::RenderPipeline,
-    //can probably be shared
+//Typically owned by "app and shared between shadertoylike buffers
+pub struct ShaderToyUniforms{
     uniform_buffer:wgpu::Buffer,
     uniform_bind_group:wgpu::BindGroup,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    uniforms:Uniforms,
-    texture_rtt:wgpu::Texture,
-    diffuse_bind_group:wgpu::BindGroup,
-    num_indices: u32,
+    uniform_bind_group_layout :wgpu::BindGroupLayout,
+   pub uniforms:Uniforms,
 }
 
-impl ShaderToylikeBuffer{
-
-    pub fn create(
+impl ShaderToyUniforms {
+    pub fn new(
         device: &wgpu::Device,
-        texture_bind_group_layout: &wgpu::BindGroupLayout,
-        surface_config: &wgpu::SurfaceConfiguration,
-    ) ->Result<Self>{
-
-        let shader = device.create_shader_module(wgpu::include_wgsl!("../shadertoys/shader_buffer_a.wgsl"));
+    )->Result<Self> {
 
         let uniforms = Uniforms::new();
 
@@ -138,12 +129,61 @@ impl ShaderToylikeBuffer{
             ],
             label: Some("uniform_bind_group"),
         });
+        Ok(Self{
+            uniform_bind_group,
+            uniform_bind_group_layout,
+            uniform_buffer,
+            uniforms,
+        })
+    }
+
+    pub fn uni(self:&mut Self)->&mut Uniforms{
+       &mut self.uniforms
+    }
+
+    pub fn push_buffer_to_gfx_card(self: &Self,queue: &wgpu::Queue){
+        queue.write_buffer(&self.uniform_buffer,0,bytemuck::cast_slice(&[self.uniforms]));
+    }
+}
+
+pub struct ShaderToylikeBuffer{
+
+    render_pipeline: wgpu::RenderPipeline,
+    target_rtt : nocmp::texture::Texture,
+    target_rtt_bindgroup : wgpu::BindGroup,
+    //can probably be shared
+    vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
+    num_indices: u32,
+}
+
+
+impl ShaderToylikeBuffer{
+
+    pub fn create(
+        device: &wgpu::Device,
+        toylike_uniforms: &ShaderToyUniforms,
+        texture_bind_group_layout: &wgpu::BindGroupLayout,
+        surface_config: &wgpu::SurfaceConfiguration,
+        shader_descriptor: wgpu::ShaderModuleDescriptor,
+    ) ->Result<Self>{
+
+        //let shader = device.create_shader_module(wgpu::include_wgsl!("../shadertoys/shader_buffer_a.wgsl"));
+        let shader = device.create_shader_module(shader_descriptor);
+
+        let target_rtt = nocmp::texture::Texture::create_rtt_texture(1024_u32,1024_u32,&device,Some("target rtt texture")).unwrap();
+        let (bind_group_layout,target_rtt_bindgroup) = nocmp::texture::setup_texture_stage(
+            &device,
+            &[&target_rtt],
+            Some("target_rtt")
+        ).unwrap();
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
-                    &uniform_bind_group_layout,
+                    //&uniform_bind_group_layout,
+                    &toylike_uniforms.uniform_bind_group_layout,
                     &texture_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
@@ -190,30 +230,52 @@ impl ShaderToylikeBuffer{
             },
             multiview: None,
         });
-        todo!("create this");
-        /*
+
+
+        let vertex_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(VERTICES),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
+
+        let index_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(INDICES),
+                usage: wgpu::BufferUsages::INDEX,
+            }
+        );
+
+
+        let num_indices= INDICES.len() as u32;
+
         Ok(Self{
-            render_pipeline_rtt,
-            uniform_bind_group,
-            diffuse_bind_group,
+            render_pipeline,
             vertex_buffer,
             index_buffer,
             num_indices,
-            texture_rtt,
-
-        })*/
-        /*Ok(Self{
-
-        })*/
+            target_rtt,
+            target_rtt_bindgroup,
+        })
     }
 
-    pub fn render(self: &Self, encoder: &mut wgpu::CommandEncoder)
+    pub fn get_target_rtt_bindgroup(self: &Self) -> &wgpu::BindGroup{
+        &self.target_rtt_bindgroup
+    }
+
+    pub fn render_to_own_buffer(
+        self: &Self,
+        textures_group: &wgpu::BindGroup,
+        toylike_uniforms : &ShaderToyUniforms,
+        encoder: &mut wgpu::CommandEncoder,
+    )
     {
-        let texture_view_rtt = self.texture_rtt.create_view(&wgpu::TextureViewDescriptor::default());
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("My First Render Pass to RTT"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment{
-        view: &texture_view_rtt,
+        view: &self.target_rtt.view,
         resolve_target: None,
         ops: wgpu::Operations {
         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -228,13 +290,49 @@ impl ShaderToylikeBuffer{
         depth_stencil_attachment: None,
         });
 
-
-        render_pass.set_pipeline(&self.render_pipeline_rtt);
-        render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
-        render_pass.set_bind_group(1,&self.diffuse_bind_group,&[]);
+        render_pass.set_pipeline(&self.render_pipeline);
+        //render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
+        render_pass.set_bind_group(0,&toylike_uniforms.uniform_bind_group,&[]);
+        render_pass.set_bind_group(1,textures_group,&[]);
         render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
         render_pass.draw_indexed(0..self.num_indices,0,0..1);
         //render_pass.draw(0..self.num_vertices,0..1);
+    }
+
+    pub fn render_to_screen(
+        self: &Self,
+        view: &wgpu::TextureView,
+        textures_group: &wgpu::BindGroup,
+        toylike_uniforms : &ShaderToyUniforms,
+        encoder: &mut wgpu::CommandEncoder
+    )
+    {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("My First Render Pass to RTT"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment{
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.1,
+                        g: 0.2,
+                        b: 0.3,
+                        a: 1.0,
+                    }),
+                    store: true,
+                },
+            })],
+            depth_stencil_attachment: None,
+        });
+
+
+        render_pass.set_pipeline(&self.render_pipeline);
+        //render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
+        render_pass.set_bind_group(0,&toylike_uniforms.uniform_bind_group,&[]);
+        render_pass.set_bind_group(1,textures_group,&[]);
+        render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
+        render_pass.draw_indexed(0..self.num_indices,0,0..1);
     }
 }
