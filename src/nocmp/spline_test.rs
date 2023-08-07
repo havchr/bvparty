@@ -1,43 +1,27 @@
 /*
-This creates a pipeline with a render-texture like a buffer in shadertoy.
+This is some preliminary code to
+test rendering curves,
+todo - we should tesselate, right now we can only render thin lines
+and line width is not supported, so we should tesselate into nice lines.
+todo - we should also figure out how we can update vertex data on the gpu.
+how do we do that with wgpu?
  */
 use anyhow::*;
 use wgpu::util::DeviceExt;
 use crate::nocmp;
+use crate::nocmp::spline_curves::CurvePoint;
 
 #[repr(C)]
 #[derive(Copy,Clone, Debug,bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
+pub struct SplineVertex {
     position: [f32;3],
-    color: [f32;3],
+    uv: [f32;2],
 }
 
-
-#[repr(C)]
-#[derive(Debug,Copy,Clone,bytemuck::Pod,bytemuck::Zeroable)]
-pub struct Uniforms{
-    pub iMouse:[f32;4],
-    pub iResolution:[f32;2],
-    pub iTime:f32,
-    pub pad1:f32,
-}
-
-impl Uniforms{
-    fn new()->Self {
-        Uniforms{
-            iMouse: [0.0,0.0,0.0,0.0],
-            iTime: 0.0,
-            iResolution: [0.0,0.0],
-            pad1: 0.0,
-        }
-    }
-}
-
-
-impl Vertex {
+impl SplineVertex{
     fn desc()-> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            array_stride: std::mem::size_of::<SplineVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
                 wgpu::VertexAttribute {
@@ -48,7 +32,7 @@ impl Vertex {
                 wgpu::VertexAttribute {
                     offset: std::mem::size_of::<[f32;3]>() as wgpu::BufferAddress,
                     shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x3,
+                    format: wgpu::VertexFormat::Float32x2,
                 }
             ]
         }
@@ -68,106 +52,69 @@ impl Vertex {
     }
 }
 
-const VERTICES: &[Vertex]= &[
-    Vertex { position: [-1.0, -1.0, 0.0], color: [1.0, 0.0, 0.0] }, //Bottom left
-    Vertex { position: [1.0, -1.0, 0.0], color: [0.0, 1.0, 0.0] }, //Bottom right
-    Vertex { position: [-1.0, 1.0, 0.0], color: [0.0, 0.0, 1.0] },//Upper left
-    Vertex { position: [1.0, 1.0, 0.0], color: [0.0, 0.0, 1.0] },//Upper right
-];
+const spline_resolution : u32 = 1000;
 
-const INDICES: &[u16] = &[
-    0,1,2,
-    2,1,3
-];
-
-//Typically owned by "app and shared between shadertoylike buffers
-pub struct ShaderToyUniforms{
-    uniform_buffer:wgpu::Buffer,
-    pub uniform_bind_group:wgpu::BindGroup,
-    pub uniform_bind_group_layout :wgpu::BindGroupLayout,
-   pub uniforms:Uniforms,
-}
-
-impl ShaderToyUniforms {
-    pub fn new(
-        device: &wgpu::Device,
-    )->Result<Self> {
-
-        let uniforms = Uniforms::new();
-
-        let uniform_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Uniform Buffer"),
-                contents: bytemuck::cast_slice(&[uniforms]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            }
-        );
-
-        let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility:wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count:None,
-                }
-            ],
-            label: Some("uniform_bind_group_layout"),
-        });
-
-        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &uniform_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding:0,
-                    resource:uniform_buffer.as_entire_binding(),
-                }
-            ],
-            label: Some("uniform_bind_group"),
-        });
-        Ok(Self{
-            uniform_bind_group,
-            uniform_bind_group_layout,
-            uniform_buffer,
-            uniforms,
-        })
-    }
-
-    pub fn uni(self:&mut Self)->&mut Uniforms{
-       &mut self.uniforms
-    }
-
-    pub fn push_buffer_to_gfx_card(self: &Self,queue: &wgpu::Queue){
-        queue.write_buffer(&self.uniform_buffer,0,bytemuck::cast_slice(&[self.uniforms]));
-    }
-}
-
-pub struct ShaderToylikeBuffer{
+pub struct SplineTest{
 
     render_pipeline: wgpu::RenderPipeline,
     target_rtt : nocmp::texture::Texture,
     target_rtt_bindgroup : wgpu::BindGroup,
-    //can probably be shared
     vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    num_indices: u32,
+    spline_vertices : [SplineVertex;spline_resolution as usize],
+}
+
+impl SplineTest {
+    pub(crate) fn update_spline(self: &mut Self) {
+        //todo - we are unable to update the vertex data on the gpu.
+        //todo must figure out how we update buffers / communicate from cpu to gpu
+        let spline_vertices = &mut self.spline_vertices;
+        Self::update_spline_directly( spline_vertices);
+    }
+
+    fn update_spline_directly(spline_vertices: &mut [SplineVertex; spline_resolution as usize]) {
+        use nocmp::spline_curves;
+        let bezP0 = CurvePoint {x:-0.75,y:0.0,z:0.0};
+        let bezP1 = CurvePoint {x:-0.75,y:0.5,z:0.0};
+        let bezP2 = CurvePoint {x:0.75,y:0.5,z:0.0};
+        let bezP3 = CurvePoint {x:0.75,y:0.0,z:0.0};
+
+        let bezzyPs = [bezP0,bezP1,bezP2,bezP3];
+        for i in 0..spline_resolution {
+            let t: f32 = i as f32 / spline_resolution as f32;
+            //let bezCalc = spline_curves::do_bezzy(&bezzyPs, t);
+            let bezCalc = spline_curves::do_catmull_rom(&bezzyPs, t);
+            let bezCalc = spline_curves::do_hermite(&bezzyPs, t);
+            let bezCalc = spline_curves::do_b_spline(&bezzyPs, t);
+            println!("{} {} {} for t={}",bezCalc.x,bezCalc.y,bezCalc.z,t);
+            spline_vertices[i as usize].position[0] = bezCalc.x;
+            spline_vertices[i as usize].position[1] = bezCalc.y;
+            spline_vertices[i as usize].position[2] = bezCalc.z;
+
+            spline_vertices[i as usize].uv[0] = 0.0;
+            spline_vertices[i as usize].uv[1] = t;
+        }
+    }
 }
 
 
-impl ShaderToylikeBuffer{
+impl SplineTest{
 
     pub fn create(
         device: &wgpu::Device,
-        toylike_uniforms: &ShaderToyUniforms,
+        toylike_uniforms: &nocmp::shadertoy_buffer::ShaderToyUniforms,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         surface_config: &wgpu::SurfaceConfiguration,
         shader_descriptor: wgpu::ShaderModuleDescriptor,
     ) ->Result<Self>{
 
+
+        let mut spline_vertices: [SplineVertex;spline_resolution as usize]= [
+            SplineVertex{
+                position: [0.0,0.0,0.0],
+                uv : [0.0,0.0]
+            }
+            ;spline_resolution as usize];
+        Self::update_spline_directly(&mut spline_vertices);
         //let shader = device.create_shader_module(wgpu::include_wgsl!("../shadertoys/shader_buffer_a.wgsl"));
         let shader = device.create_shader_module(shader_descriptor);
 
@@ -196,7 +143,7 @@ impl ShaderToylikeBuffer{
                 module: &shader,
                 entry_point: "vs_main",
                 buffers:&[
-                    Vertex::descy(),
+                    SplineVertex::descy(),
                 ],
             },
             fragment: Some(wgpu::FragmentState {
@@ -210,7 +157,7 @@ impl ShaderToylikeBuffer{
             }),
 
             primitive:wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
+                topology: wgpu::PrimitiveTopology::LineStrip,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
@@ -234,30 +181,20 @@ impl ShaderToylikeBuffer{
 
         let vertex_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(VERTICES),
+                label: Some("Vertex Buffer for spline"),
+                contents: bytemuck::cast_slice(&spline_vertices),
                 usage: wgpu::BufferUsages::VERTEX,
             }
         );
 
-        let index_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(INDICES),
-                usage: wgpu::BufferUsages::INDEX,
-            }
-        );
 
-
-        let num_indices= INDICES.len() as u32;
 
         Ok(Self{
             render_pipeline,
             vertex_buffer,
-            index_buffer,
-            num_indices,
             target_rtt,
             target_rtt_bindgroup,
+            spline_vertices,
         })
     }
 
@@ -268,7 +205,7 @@ impl ShaderToylikeBuffer{
     pub fn render_to_own_buffer(
         self: &Self,
         textures_group: &wgpu::BindGroup,
-        toylike_uniforms : &ShaderToyUniforms,
+        toylike_uniforms : &nocmp::shadertoy_buffer::ShaderToyUniforms,
         encoder: &mut wgpu::CommandEncoder,
     )
     {
@@ -280,7 +217,7 @@ impl ShaderToylikeBuffer{
         ops: wgpu::Operations {
         load: wgpu::LoadOp::Clear(wgpu::Color {
         r: 0.1,
-        g: 0.2,
+        g: 0.8,
         b: 0.3,
         a: 1.0,
         }),
@@ -295,8 +232,9 @@ impl ShaderToylikeBuffer{
         render_pass.set_bind_group(0,&toylike_uniforms.uniform_bind_group,&[]);
         render_pass.set_bind_group(1,textures_group,&[]);
         render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
-        render_pass.draw_indexed(0..self.num_indices,0,0..1);
+        //render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
+        //render_pass.draw_indexed(0..self.num_indices,0,0..1);
+        render_pass.draw(0..spline_resolution,0..1);
         //render_pass.draw(0..self.num_vertices,0..1);
     }
 
@@ -304,7 +242,7 @@ impl ShaderToylikeBuffer{
         self: &Self,
         view: &wgpu::TextureView,
         textures_group: &wgpu::BindGroup,
-        toylike_uniforms : &ShaderToyUniforms,
+        toylike_uniforms : &nocmp::shadertoy_buffer::ShaderToyUniforms,
         encoder: &mut wgpu::CommandEncoder
     )
     {
@@ -316,7 +254,7 @@ impl ShaderToylikeBuffer{
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
                         r: 0.1,
-                        g: 0.2,
+                        g: 0.8,
                         b: 0.3,
                         a: 1.0,
                     }),
@@ -326,13 +264,11 @@ impl ShaderToylikeBuffer{
             depth_stencil_attachment: None,
         });
 
-
         render_pass.set_pipeline(&self.render_pipeline);
         //render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
         render_pass.set_bind_group(0,&toylike_uniforms.uniform_bind_group,&[]);
         render_pass.set_bind_group(1,textures_group,&[]);
         render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
-        render_pass.draw_indexed(0..self.num_indices,0,0..1);
+        render_pass.draw(0..spline_resolution,0..1);
     }
 }

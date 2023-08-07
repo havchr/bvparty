@@ -58,7 +58,7 @@ fn smoothedCircle(pos : vec2<f32> ,size:f32,smoothFactor:f32,uv:vec2<f32>) -> f3
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
-    let colorSpewingBallRadius = 0.1;
+    let colorSpewingBallRadius = 0.05;
     let colorSpewingBallRadiusOuterEdge = 0.2;
     let timeTick = sin(uniforms.iTime);
 
@@ -79,7 +79,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     //reading previous frame and diminishing color by a factor : also clamping to keep values from going haywire.
     var texCol :vec3f = textureSample(t_diffuse,s_diffuse,in.uv).rgb - vec3f(0.01,0.01,0.01);
     texCol = clamp(texCol,vec3f(0.0),vec3f(1.0));
-    var adjustments :vec3f  = vec3f(0.0);
+    var adjustments :vec3f  = smoo * vec3f(0.02);
     //var dutchColors : vec3f = (0.5 + 0.5*cos(uniforms.iTime+in.uv.xyx+vec3f(0,2,4)));
 
 

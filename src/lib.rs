@@ -1,5 +1,6 @@
-mod nocmp;
+pub mod nocmp;
 
+use std::mem::size_of;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -8,6 +9,7 @@ use winit::{
 
 use wgpu::util::DeviceExt;
 use instant::Duration;
+use winit::dpi::{PhysicalSize, Size};
 
 
 #[repr(C)]
@@ -88,7 +90,8 @@ const INDICES: &[u16] = &[
 pub async fn run() {
     env_logger::init();
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let window_size = Size::from(PhysicalSize::new(1024,1024));
+    let window = WindowBuilder::new().with_inner_size(window_size).build(&event_loop).unwrap();
 
     let mut state = State::new(window).await;
     let mut last_render_time = instant::Instant::now(); 
@@ -184,6 +187,7 @@ struct State {
     buffer_a: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
     buffer_b: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
     buffer_screen: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
+    spline_test: nocmp::spline_test::SplineTest,
     toylike_uniforms: nocmp::shadertoy_buffer::ShaderToyUniforms,
 
 }
@@ -311,6 +315,14 @@ impl State {
             &texture_bind_group_layout,
             &config,
             wgpu::include_wgsl!("shadertoys/shader_buffer_screen.wgsl")
+        ).unwrap();
+
+        let spline_test = nocmp::spline_test::SplineTest::create(
+            &device,
+            &toylike_uniforms,
+            &texture_bind_group_layout,
+            &config,
+            wgpu::include_wgsl!("shadertoys/red_test.wgsl")
         ).unwrap();
 
 
@@ -518,6 +530,7 @@ impl State {
             buffer_b,
             buffer_screen,
             toylike_uniforms,
+            spline_test,
 
         }
     }
@@ -562,6 +575,8 @@ impl State {
         self.buffer_a.render_to_own_buffer(self.buffer_b.get_target_rtt_bindgroup(),&self.toylike_uniforms,&mut encoder);
         self.buffer_b.render_to_own_buffer(self.buffer_a.get_target_rtt_bindgroup(),&self.toylike_uniforms,&mut encoder);
         self.buffer_screen.render_to_screen(&view_of_surface,self.buffer_a.get_target_rtt_bindgroup(),&self.toylike_uniforms,&mut encoder);
+        //self.spline_test.update_spline();
+        self.spline_test.render_to_screen(&view_of_surface,self.buffer_a.get_target_rtt_bindgroup(),&self.toylike_uniforms,&mut encoder);
 
         //submit will accept anythingthatimplements IntoIter
         self.queue.submit(std::iter::once(encoder.finish()));

@@ -202,6 +202,7 @@ dependencies = [
  "image",
  "instant",
  "log",
+ "matrix_operations",
  "pollster",
  "wgpu",
  "winit",
@@ -735,6 +736,12 @@ checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "matrix_operations"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba7e4bad3fa1587a27d227859b00633627bd937025290c7b94bbfa4ac1dd9ef7"
 
 [[package]]
 name = "memchr"
