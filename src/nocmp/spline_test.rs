@@ -3,8 +3,6 @@ This is some preliminary code to
 test rendering curves,
 todo - we should tesselate, right now we can only render thin lines
 and line width is not supported, so we should tesselate into nice lines.
-todo - we should also figure out how we can update vertex data on the gpu.
-how do we do that with wgpu?
  */
 use anyhow::*;
 use wgpu::util::DeviceExt;
@@ -64,28 +62,27 @@ pub struct SplineTest{
 }
 
 impl SplineTest {
-    pub(crate) fn update_spline(self: &mut Self) {
+    pub(crate) fn update_spline(self: &mut Self,time_seconds:f32) {
         //todo - we are unable to update the vertex data on the gpu.
         //todo must figure out how we update buffers / communicate from cpu to gpu
         let spline_vertices = &mut self.spline_vertices;
-        Self::update_spline_directly( spline_vertices);
+        Self::update_spline_directly( spline_vertices,time_seconds);
     }
 
-    fn update_spline_directly(spline_vertices: &mut [SplineVertex; spline_resolution as usize]) {
+    fn update_spline_directly(spline_vertices: &mut [SplineVertex; spline_resolution as usize],time : f32) {
         use nocmp::spline_curves;
-        let bezP0 = CurvePoint {x:-0.75,y:0.0,z:0.0};
+        let bezP0 = CurvePoint {x:-0.75,y:time.sin(),z:0.0};
         let bezP1 = CurvePoint {x:-0.75,y:0.5,z:0.0};
-        let bezP2 = CurvePoint {x:0.75,y:0.5,z:0.0};
+        let bezP2 = CurvePoint {x:0.75,y:time.cos(),z:0.0};
         let bezP3 = CurvePoint {x:0.75,y:0.0,z:0.0};
 
         let bezzyPs = [bezP0,bezP1,bezP2,bezP3];
         for i in 0..spline_resolution {
             let t: f32 = i as f32 / spline_resolution as f32;
-            //let bezCalc = spline_curves::do_bezzy(&bezzyPs, t);
-            let bezCalc = spline_curves::do_catmull_rom(&bezzyPs, t);
+            let bezCalc = spline_curves::do_bezzy(&bezzyPs, t);
+            /*let bezCalc = spline_curves::do_catmull_rom(&bezzyPs, t);
             let bezCalc = spline_curves::do_hermite(&bezzyPs, t);
-            let bezCalc = spline_curves::do_b_spline(&bezzyPs, t);
-            println!("{} {} {} for t={}",bezCalc.x,bezCalc.y,bezCalc.z,t);
+            let bezCalc = spline_curves::do_b_spline(&bezzyPs, t);*/
             spline_vertices[i as usize].position[0] = bezCalc.x;
             spline_vertices[i as usize].position[1] = bezCalc.y;
             spline_vertices[i as usize].position[2] = bezCalc.z;
@@ -114,7 +111,7 @@ impl SplineTest{
                 uv : [0.0,0.0]
             }
             ;spline_resolution as usize];
-        Self::update_spline_directly(&mut spline_vertices);
+        Self::update_spline_directly(&mut spline_vertices,0.0);
         //let shader = device.create_shader_module(wgpu::include_wgsl!("../shadertoys/shader_buffer_a.wgsl"));
         let shader = device.create_shader_module(shader_descriptor);
 
@@ -183,7 +180,7 @@ impl SplineTest{
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer for spline"),
                 contents: bytemuck::cast_slice(&spline_vertices),
-                usage: wgpu::BufferUsages::VERTEX,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             }
         );
 
@@ -203,12 +200,13 @@ impl SplineTest{
     }
 
     pub fn render_to_own_buffer(
-        self: &Self,
+        self: &mut Self,
         textures_group: &wgpu::BindGroup,
         toylike_uniforms : &nocmp::shadertoy_buffer::ShaderToyUniforms,
         encoder: &mut wgpu::CommandEncoder,
     )
     {
+        self.update_spline(toylike_uniforms.uniforms.iTime);
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("My First Render Pass to RTT"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment{
@@ -239,13 +237,18 @@ impl SplineTest{
     }
 
     pub fn render_to_screen(
-        self: &Self,
+        self: &mut Self,
         view: &wgpu::TextureView,
         textures_group: &wgpu::BindGroup,
         toylike_uniforms : &nocmp::shadertoy_buffer::ShaderToyUniforms,
-        encoder: &mut wgpu::CommandEncoder
+        encoder: &mut wgpu::CommandEncoder,
+        queue : &wgpu::Queue
     )
     {
+
+        self.update_spline(toylike_uniforms.uniforms.iTime);
+        //todo - convert from proof of concept to something more usable.
+        queue.write_buffer(&self.vertex_buffer,0,bytemuck::cast_slice(&self.spline_vertices[0..spline_resolution as usize]));
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("My First Render Pass to RTT"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment{
