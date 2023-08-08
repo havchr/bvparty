@@ -63,8 +63,6 @@ pub struct SplineTest{
 
 impl SplineTest {
     pub(crate) fn update_spline(self: &mut Self,time_seconds:f32) {
-        //todo - we are unable to update the vertex data on the gpu.
-        //todo must figure out how we update buffers / communicate from cpu to gpu
         let spline_vertices = &mut self.spline_vertices;
         Self::update_spline_directly( spline_vertices,time_seconds);
     }
@@ -76,10 +74,15 @@ impl SplineTest {
         let bezP2 = CurvePoint {x:0.75,y:time.cos(),z:0.0};
         let bezP3 = CurvePoint {x:0.75,y:0.0,z:0.0};
 
-        let bezzyPs = [bezP0,bezP1,bezP2,bezP3];
+        let bezP0_2 = bezP3.clone();
+        let bezP1_2 = CurvePoint {x:-0.75,y:0.5,z:0.0};
+        let bezP2_2 = CurvePoint {x:0.75,y:time.cos(),z:0.0};
+        let bezP3_2 = CurvePoint {x:0.75,y:0.0,z:0.0};
+
+        let bezzyPs = [bezP0,bezP1,bezP2,bezP3,bezP0_2,bezP1_2,bezP2_2,bezP3_2];
         for i in 0..spline_resolution {
             let t: f32 = i as f32 / spline_resolution as f32;
-            let bezCalc = spline_curves::do_bezzy(&bezzyPs, t);
+            let bezCalc = spline_curves::do_bezzy_spline_t_01(&bezzyPs, t).unwrap();
             /*let bezCalc = spline_curves::do_catmull_rom(&bezzyPs, t);
             let bezCalc = spline_curves::do_hermite(&bezzyPs, t);
             let bezCalc = spline_curves::do_b_spline(&bezzyPs, t);*/

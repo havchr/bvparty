@@ -1,4 +1,5 @@
 use matrix_operations::matrix;
+use anyhow::*;
 
 /*
 This is spline/curve code based on the really nice video from Freya Holmér found here :
@@ -6,16 +7,46 @@ https://www.youtube.com/watch?v=jvPPXbo87ds&ab_channel=FreyaHolm%C3%A9r
 It implements different curves by using different coeffecion matrices for the cubic function.
  */
 
+//todo - serde to save and load curve data. ?
+
+//todo - easing functions for the 0-1 case ease-out , ease-in etc...
+
+//todo - a good way to read curve data , a good way to get curve data (export from blender?)
+//todo curve editor?
 //todo - we should have a proper (math)Vector struct that can do all math things and such
+//todo - we should be able to set constrains on connected points in a bezier spline, tangent can
+// be 1) mirrored, 2) mirrored but scaled 3) free
+//Mirrored , typically we will need a vector from point and then just *-1 that vector I guess?
+#[derive(Clone)]
 pub struct CurvePoint {
    pub x: f32,
     pub y: f32,
     pub z: f32
 }
+pub fn do_bezzy_spline_t_01(points: &[CurvePoint], t : f32) -> Result<CurvePoint> {
+    //We want a spline with 5 points to go to 0-2 because we have 0,1,2,3 and then 1,2,3,4
+    if points.len() % 4 != 0 {
+        return Err(anyhow::anyhow!("spline points not multiple of 4"));
+    }
+    let t_whole_number = points.len() as f32 / 4.0;
+    Ok(do_bezzy_spline(&points,t*t_whole_number))
+}
 
+pub fn do_bezzy_spline(points: &[CurvePoint], t : f32) -> CurvePoint {
+   //assuming n num of points,
+    //if we are 1.2
+    let index_start= t.floor() as usize *4;
+    let index_end =  index_start +4;
+    let t_local= t.fract();
+    println!("we are given t = {} and t_local is = {} and index_start = {} and index_end = {}",t,t_local,index_start,index_end);
+    if index_end > points.len() {
+      return points[points.len()-1].clone();
+    }
+    do_bezzy(&points[index_start..index_end],t_local)
+}
 /// Bezier, Use case - shapes, fonts, vector graphics
 /// Continuity C^0/C^1 tangents are manual, interpol - some (hits some of its points directly)
-pub fn do_bezzy(points: &[CurvePoint;4], t : f32) -> CurvePoint {
+pub fn do_bezzy(points: &[CurvePoint], t : f32) -> CurvePoint {
     let coefs = matrix![
             [ 1.0,    0.0,    0.0,    0.0],
             [-3.0,    3.0,    0.0,    0.0],
