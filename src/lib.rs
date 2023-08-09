@@ -104,6 +104,10 @@ struct State {
     buffer_screen: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
     spline_test: nocmp::spline_test::SplineTest,
     toylike_uniforms: nocmp::shadertoy_buffer::ShaderToyUniforms,
+    camera: nocmp::camera::Camera,
+    camera_controller: nocmp::camera::CameraController,
+    camera_uniform : nocmp::camera::CameraUniform,
+    camera_uniform_buffer : wgpu::Buffer,
 
 }
 
@@ -221,14 +225,33 @@ impl State {
             wgpu::include_wgsl!("shadertoys/shader_buffer_screen.wgsl")
         ).unwrap();
 
+
+
+        let camera = nocmp::camera::Camera {
+            // position the camera one unit up and 2 units back
+            // +z is out of the screen
+            eye: (0.0, 1.0, 2.0).into(),
+            // have it look at the origin
+            target: (0.0, 0.0, 0.0).into(),
+            // which way is "up"
+            up: cgmath::Vector3::unit_y(),
+            aspect: config.width as f32 / config.height as f32,
+            fov_y: 45.0,
+            z_near: 0.1,
+            z_far: 100.0,
+        };
+        let camera_controller = nocmp::camera::CameraController::new(5.0);
+        let mut camera_uniform = nocmp::camera::CameraUniform::new();
+        let camera_uniform_buffer = camera_uniform.create_buffer(&device).unwrap();
+
         let spline_test = nocmp::spline_test::SplineTest::create(
             &device,
             &toylike_uniforms,
             &texture_bind_group_layout,
             &config,
-            wgpu::include_wgsl!("shadertoys/red_test.wgsl")
+            wgpu::include_wgsl!("shadertoys/test.wgsl"),
+            &camera_uniform_buffer,
         ).unwrap();
-
 
 
         Self{
@@ -248,6 +271,10 @@ impl State {
             buffer_screen,
             toylike_uniforms,
             spline_test,
+            camera,
+            camera_controller,
+            camera_uniform,
+            camera_uniform_buffer
 
         }
     }

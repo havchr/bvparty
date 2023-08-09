@@ -7,6 +7,7 @@ and line width is not supported, so we should tesselate into nice lines.
 use anyhow::*;
 use wgpu::util::DeviceExt;
 use crate::nocmp;
+use crate::nocmp::bindgrouperoo::BindGrouperoo;
 use crate::nocmp::spline_curves::CurvePoint;
 
 #[repr(C)]
@@ -57,6 +58,7 @@ pub struct SplineTest{
     render_pipeline: wgpu::RenderPipeline,
     target_rtt : nocmp::texture::Texture,
     target_rtt_bindgroup : wgpu::BindGroup,
+    uniform_groupio : BindGrouperoo,
     vertex_buffer: wgpu::Buffer,
     spline_vertices : [SplineVertex;spline_resolution as usize],
 }
@@ -105,6 +107,7 @@ impl SplineTest{
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         surface_config: &wgpu::SurfaceConfiguration,
         shader_descriptor: wgpu::ShaderModuleDescriptor,
+        camera_uniform_buffer : &wgpu::Buffer,
     ) ->Result<Self>{
 
 
@@ -125,12 +128,25 @@ impl SplineTest{
             Some("target_rtt")
         ).unwrap();
 
+        //todo up next , make camera matrix work, update camera and move things/camera on screen.
+
+        //todo make proper good structure for this bindgrouperoo thing..
+        //right now, it is a mess we are trying to understand.
+        //but here at least, we are creating
+        // (binding 0) uniform buffers with app-uniforms like iTime etc accessible from both vertex and fragment
+        // (binding 1) camera uniforms accessible from the Vertex shader
+        let uniform_groupio= nocmp::bindgrouperoo::BindGrouperoo::new(&device,
+        &[wgpu::ShaderStages::VERTEX_FRAGMENT,
+                 wgpu::ShaderStages::VERTEX],
+       &[&toylike_uniforms.uniform_buffer,
+                      &camera_uniform_buffer],Some("bindGroup uniform thing"));
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
                     //&uniform_bind_group_layout,
-                    &toylike_uniforms.uniform_bind_group_layout,
+                    &uniform_groupio.bind_group_layout,
                     &texture_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
@@ -195,6 +211,7 @@ impl SplineTest{
             target_rtt,
             target_rtt_bindgroup,
             spline_vertices,
+            uniform_groupio,
         })
     }
 
@@ -272,7 +289,8 @@ impl SplineTest{
 
         render_pass.set_pipeline(&self.render_pipeline);
         //render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
-        render_pass.set_bind_group(0,&toylike_uniforms.uniform_bind_group,&[]);
+        //render_pass.set_bind_group(0,&toylike_uniforms.uniform_bind_group,&[]);
+        render_pass.set_bind_group(0,&self.uniform_groupio.bind_group,&[]);
         render_pass.set_bind_group(1,textures_group,&[]);
         render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
         render_pass.draw(0..spline_resolution,0..1);

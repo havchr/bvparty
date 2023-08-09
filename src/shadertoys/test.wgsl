@@ -5,9 +5,20 @@ iResolution: vec2<f32>,
 iTime:f32,
 };
 
+struct VertUniforms {
+view_proj: mat4x4<f32>,
+};
+
+// https://toji.dev/webgpu-best-practices/bind-groups.html
+//some info here - group(0) should contain variables that rareley changes per mesh
+// for instance, camera and such
+//group 1 can be materials and such that changes sometimes, but not as often as
+//group 2 , model matrix, changes per model/mesh.
+
 @group(0) @binding(0)
 var<uniform> uniforms: Uniforms;
-
+@group(0) @binding(1)
+var<uniform> vert_uniforms: VertUniforms;
 @group(1) @binding(0)
 var t_diffuse: texture_2d<f32>;
 @group(1) @binding(1)

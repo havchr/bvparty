@@ -38,7 +38,6 @@ pub fn do_bezzy_spline(points: &[CurvePoint], t : f32) -> CurvePoint {
     let index_start= t.floor() as usize *4;
     let index_end =  index_start +4;
     let t_local= t.fract();
-    println!("we are given t = {} and t_local is = {} and index_start = {} and index_end = {}",t,t_local,index_start,index_end);
     if index_end > points.len() {
       return points[points.len()-1].clone();
     }

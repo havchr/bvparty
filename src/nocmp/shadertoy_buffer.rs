@@ -82,7 +82,7 @@ const INDICES: &[u16] = &[
 
 //Typically owned by "app and shared between shadertoylike buffers
 pub struct ShaderToyUniforms{
-    uniform_buffer:wgpu::Buffer,
+    pub uniform_buffer:wgpu::Buffer,
     pub uniform_bind_group:wgpu::BindGroup,
     pub uniform_bind_group_layout :wgpu::BindGroupLayout,
    pub uniforms:Uniforms,

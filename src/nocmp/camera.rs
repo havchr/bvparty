@@ -4,6 +4,9 @@ use winit::{
     window::WindowBuilder,
 };
 
+use wgpu::util::DeviceExt;
+use anyhow::*;
+
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
@@ -13,15 +16,17 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 );
 
 
-struct Camera{
-    eye: cgmath::Point3<f32>,
-    target: cgmath::Point3<f32>,
-    up: cgmath::Vector3<f32>,
-    aspect: f32,
-    fov_y: f32,
-    z_near: f32,
-    z_far: f32,
+pub struct Camera{
+    pub eye: cgmath::Point3<f32>,
+    pub target: cgmath::Point3<f32>,
+    pub up: cgmath::Vector3<f32>,
+    pub aspect: f32,
+    pub fov_y: f32,
+    pub z_near: f32,
+    pub z_far: f32,
 }
+
+
 
 impl Camera {
     pub fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
@@ -40,26 +45,37 @@ impl Camera {
 #[repr(C)]
 // This is so we can store this in a buffer
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct CameraUniform {
+pub struct CameraUniform {
     // We can't use cgmath with bytemuck directly so we'll have
     // to convert the Matrix4 into a 4x4 f32 array
     view_proj: [[f32; 4]; 4],
 }
 
 impl CameraUniform {
-    fn new() -> Self {
+    pub fn new() -> Self {
         use cgmath::SquareMatrix;
         Self {
             view_proj: cgmath::Matrix4::identity().into(),
         }
     }
 
-    fn update_view_proj(&mut self, camera: &Camera) {
+    pub fn update_view_proj(&mut self, camera: &Camera) {
         self.view_proj = camera.build_view_projection_matrix().into();
+    }
+
+
+    pub fn create_buffer(self: &mut Self,device: &wgpu::Device)->Result<wgpu::Buffer>{
+        Ok(device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Camera Buffer"),
+                contents: bytemuck::cast_slice(&[*self]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            }
+        ))
     }
 }
 
-struct CameraController {
+pub struct CameraController {
     speed: f32,
     is_forward_pressed: bool,
     is_backward_pressed: bool,
@@ -68,7 +84,7 @@ struct CameraController {
 }
 
 impl CameraController {
-    fn new(speed: f32) -> Self {
+    pub fn new(speed: f32) -> Self {
         Self {
             speed,
             is_forward_pressed: false,
