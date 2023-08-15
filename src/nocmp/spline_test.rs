@@ -9,6 +9,8 @@ use wgpu::util::DeviceExt;
 use crate::nocmp;
 use crate::nocmp::bindgrouperoo::BindGrouperoo;
 use crate::nocmp::spline_curves::CurvePoint;
+use std::fs::File;
+use std::io::Read;
 
 #[repr(C)]
 #[derive(Copy,Clone, Debug,bytemuck::Pod, bytemuck::Zeroable)]
@@ -82,6 +84,29 @@ impl SplineTest {
         let bezP3_2 = CurvePoint {x:0.75,y:0.0,z:0.0};
 
         let bezzyPs = [bezP0,bezP1,bezP2,bezP3,bezP0_2,bezP1_2,bezP2_2,bezP3_2];
+        // Serialize the array to a JSON string.
+
+
+        let path = "art/heart_curve.json";
+
+        // Open the file in read-only mode
+        let file = File::open(path).expect("Failed to open file");
+
+        // Read the contents of the file to a string
+        let mut contents = String::new();
+        let mut reader = std::io::BufReader::new(file);
+        reader.read_to_string(&mut contents).expect("Failed to read file");
+        println!("{}", &contents);
+        let mut bezzyPs: Vec<CurvePoint>= serde_json::from_str(&contents).expect("Failed it");
+        for element in bezzyPs.iter_mut() {
+            element.x *=0.5;
+            element.y *=0.5;
+        }
+
+        //let json_str = serde_json::to_string(&bezzyPs).expect("Failed to serialize");
+
+        // Print the JSON string.
+        //println!("{}", json_str);
         for i in 0..spline_resolution {
             let t: f32 = i as f32 / spline_resolution as f32;
             let bezCalc = spline_curves::do_bezzy_spline_t_01(&bezzyPs, t).unwrap();

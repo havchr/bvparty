@@ -17,19 +17,34 @@ It implements different curves by using different coeffecion matrices for the cu
 //todo - we should be able to set constrains on connected points in a bezier spline, tangent can
 // be 1) mirrored, 2) mirrored but scaled 3) free
 //Mirrored , typically we will need a vector from point and then just *-1 that vector I guess?
-#[derive(Clone)]
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone,Serialize,Deserialize)]
 pub struct CurvePoint {
    pub x: f32,
     pub y: f32,
     pub z: f32
 }
-pub fn do_bezzy_spline_t_01(points: &[CurvePoint], t : f32) -> Result<CurvePoint> {
+pub fn do_bezzy_spline_t_01(points: &[CurvePoint], t : f32) -> anyhow::Result<CurvePoint> {
     //We want a spline with 5 points to go to 0-2 because we have 0,1,2,3 and then 1,2,3,4
     if points.len() % 4 != 0 {
         return Err(anyhow::anyhow!("spline points not multiple of 4"));
     }
     let t_whole_number = points.len() as f32 / 4.0;
     Ok(do_bezzy_spline(&points,t*t_whole_number))
+}
+
+pub fn do_bezzy_spline_duplicate_end_points(points: &[CurvePoint], t : f32) -> CurvePoint {
+    //assuming n num of points,
+    //if we are 1.2
+    let index_start= t.floor() as usize *4;
+    let index_end =  index_start +4;
+    let t_local= t.fract();
+    if index_end > points.len() {
+        return points[points.len()-1].clone();
+    }
+    do_bezzy(&points[index_start..index_end],t_local)
 }
 
 pub fn do_bezzy_spline(points: &[CurvePoint], t : f32) -> CurvePoint {
