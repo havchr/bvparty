@@ -35,16 +35,24 @@ pub fn do_bezzy_spline_t_01(points: &[CurvePoint], t : f32) -> anyhow::Result<Cu
     Ok(do_bezzy_spline(&points,t*t_whole_number))
 }
 
+pub fn do_bezzy_super_spline_t_01(points: &[CurvePoint], t : f32) -> CurvePoint {
+    //We want a spline with 5 points to go to 0-2 because we have 0,1,2,3 and then 1,2,3,4
+    let t_whole_number = points.len() as f32 / 4.0;
+    do_bezzy_spline_duplicate_end_points(&points,t*t_whole_number)
+}
+
 pub fn do_bezzy_spline_duplicate_end_points(points: &[CurvePoint], t : f32) -> CurvePoint {
     //assuming n num of points,
-    //if we are 1.2
-    let index_start= t.floor() as usize *4;
-    let index_end =  index_start +4;
+    //for points 0-3 , we are using original points, but then 3,4,5,6 , 6,7,8,9
+    let index_start= (t.floor() as i32*4 -1).max(0) as usize;
     let t_local= t.fract();
-    if index_end > points.len() {
-        return points[points.len()-1].clone();
-    }
-    do_bezzy(&points[index_start..index_end],t_local)
+
+    do_bezzy(
+        &points[index_start],
+        &points[index_start+1],
+        &points[index_start+2],
+        &points[index_start+3],
+        t_local)
 }
 
 pub fn do_bezzy_spline(points: &[CurvePoint], t : f32) -> CurvePoint {
@@ -56,22 +64,22 @@ pub fn do_bezzy_spline(points: &[CurvePoint], t : f32) -> CurvePoint {
     if index_end > points.len() {
       return points[points.len()-1].clone();
     }
-    do_bezzy(&points[index_start..index_end],t_local)
+    do_bezzy(
+        &points[index_start],
+        &points[index_start+1],
+        &points[index_start+2],
+        &points[index_start+3],
+        t_local)
 }
 /// Bezier, Use case - shapes, fonts, vector graphics
 /// Continuity C^0/C^1 tangents are manual, interpol - some (hits some of its points directly)
-pub fn do_bezzy(points: &[CurvePoint], t : f32) -> CurvePoint {
+pub fn do_bezzy(p0: &CurvePoint, p1: &CurvePoint, p2: &CurvePoint, p3: &CurvePoint , t : f32) -> CurvePoint {
     let coefs = matrix![
             [ 1.0,    0.0,    0.0,    0.0],
             [-3.0,    3.0,    0.0,    0.0],
             [ 3.0,   -6.0,    3.0,    0.0],
             [-1.0,    3.0,   -3.0,    1.0],
             ];
-
-    let p0 = &points[0];
-    let p1 = &points[1];
-    let p2 = &points[2];
-    let p3 = &points[3];
 
     let px = matrix![
             [ p0.x],
