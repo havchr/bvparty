@@ -87,7 +87,7 @@ impl SplineTest {
         // Serialize the array to a JSON string.
 
 
-        let path = "art/heart_curve.json";
+        let path = "art/heart_curve_2.json";
 
         // Open the file in read-only mode
         let file = File::open(path).expect("Failed to open file");
@@ -99,8 +99,8 @@ impl SplineTest {
         println!("{}", &contents);
         let mut bezzyPs: Vec<CurvePoint>= serde_json::from_str(&contents).expect("Failed it");
         for element in bezzyPs.iter_mut() {
-            element.x *=0.5;
-            element.y *=0.5;
+            element.x *=0.002;
+            element.y *=0.002;
         }
 
         //let json_str = serde_json::to_string(&bezzyPs).expect("Failed to serialize");
@@ -109,7 +109,7 @@ impl SplineTest {
         //println!("{}", json_str);
         for i in 0..spline_resolution {
             let t: f32 = i as f32 / spline_resolution as f32;
-            let bezCalc = spline_curves::do_bezzy_spline_t_01(&bezzyPs, t).unwrap();
+            let bezCalc = spline_curves::do_bezzy_super_spline_t_01(&bezzyPs, t);
             /*let bezCalc = spline_curves::do_catmull_rom(&bezzyPs, t);
             let bezCalc = spline_curves::do_hermite(&bezzyPs, t);
             let bezCalc = spline_curves::do_b_spline(&bezzyPs, t);*/
