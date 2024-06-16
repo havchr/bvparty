@@ -1,5 +1,7 @@
 pub mod nocmp;
 
+use std::fs::File;
+use std::io::BufReader;
 use std::mem::size_of;
 use winit::{
     event::*,
@@ -9,6 +11,7 @@ use winit::{
 
 use wgpu::util::DeviceExt;
 use instant::Duration;
+use rodio::{Decoder, OutputStream, Source};
 use winit::dpi::{PhysicalSize, Size};
 
 
@@ -19,7 +22,20 @@ pub async fn run() {
     let window = WindowBuilder::new().with_inner_size(window_size).build(&event_loop).unwrap();
 
     let mut state = State::new(window).await;
-    let mut last_render_time = instant::Instant::now(); 
+    let mut last_render_time = instant::Instant::now();
+
+
+    //Try playing music.. 
+    // Get an output stream handle to the default physical sound device
+    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+    // Load a sound from a file, using a path relative to Cargo.toml
+    let file = BufReader::new(File::open("art/track.wav").unwrap());
+    // Decode that sound file into a source
+    let source = Decoder::new(file).unwrap();
+    // Play the sound directly on the device
+    stream_handle.play_raw(source.convert_samples());
+    let start_time = instant::Instant::now();
+
 
 
     event_loop.run(move |event, _, control_flow |{
@@ -63,6 +79,9 @@ pub async fn run() {
             Event::RedrawRequested(window_id) if window_id == state.window().id() => {
                 let now = instant::Instant::now();
                 let delta_time = now - last_render_time;
+
+
+                state.draw_sync_test(&start_time);
                 state.update(delta_time);
                 last_render_time = now;
                 match state.render() {
@@ -116,6 +135,23 @@ impl State {
     pub fn update_mousexy(&mut self, mx: f64, my: f64) {
         self.toylike_uniforms.uniforms.iMouse[0] = mx as f32;
         self.toylike_uniforms.uniforms.iMouse[1] = my as f32;
+    }
+
+    pub fn draw_sync_test(&mut self,song_time: &instant::Instant) {
+
+        let elapsed = song_time.elapsed();
+        let elapsed_millis = elapsed.as_millis();
+        let is_beat = elapsed_millis % 469 <= 55;
+        if  is_beat {
+
+            self.toylike_uniforms.uniforms.iMouse[0] = self.window.inner_size().width as f32 * 0.5_f32;
+            self.toylike_uniforms.uniforms.iMouse[1] = self.window.inner_size().height as f32 * 0.5_f32;
+            self.toylike_uniforms.uniforms.iMouse[2] = 1.0;
+        }
+        else {
+            self.toylike_uniforms.uniforms.iMouse[2] = 0.0;
+        }
+        
     }
 
     pub fn update_mouse_event(&mut self, element_state:&ElementState , button: &MouseButton) {

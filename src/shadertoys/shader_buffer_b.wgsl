@@ -58,12 +58,13 @@ fn smoothedCircle(pos : vec2<f32> ,size:f32,smoothFactor:f32,uv:vec2<f32>) -> f3
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
+    //todo let this ballSize , be controlled by application 
     let colorSpewingBallRadius = 0.05;
-    let colorSpewingBallRadiusOuterEdge = 0.2;
+    let colorSpewingBallRadiusOuterEdge = 0.075;
     let timeTick = sin(uniforms.iTime);
 
 
-    //true fucking mystery!!
+    //true fucking mystery!! (note,revisiting this comment, wish I wrote why it was a true fucking mystery,)
     let mouse_x_in_01 = uniforms.iMouse.x/uniforms.iResolution.x;
     let mouse_y_in_01 = uniforms.iMouse.y/uniforms.iResolution.y;
 
@@ -88,6 +89,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     adjustments+=dutchColors*mouseInput*0.1; //inputting mouse input..
     //adjustments+=mouseInput*0.01; //inputting mouse input..
+    }
+    else{
+    adjustments*=0.0;
     }
     //mouse input to alpha channel - used in buffer A to modify distortion strength.
     return vec4(adjustments + texCol,mouseInput*0.0001);
