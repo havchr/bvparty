@@ -57,7 +57,15 @@ fn smoothedCircle(pos : vec2<f32> ,size:f32,smoothFactor:f32,uv:vec2<f32>) -> f3
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    var texCol :vec3f = textureSample(t_diffuse,s_diffuse,in.uv).rgb;
+
+     var uv:vec2f = in.uv;
+    
+    //this modification is  me trying to make the social media scroller effect
+     uv.y*=0.25;
+     uv.x*=1.5;
+     uv.y+=pow(tan(uniforms.iTime*0.6)*0.5,3.0);
+    
+    var texCol :vec3f = textureSample(t_diffuse,s_diffuse,uv).rgb;
     texCol = clamp(texCol,vec3f(0.0),vec3f(1.0));
     return vec4(texCol,1.0);
 
