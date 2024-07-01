@@ -5,3 +5,4 @@ pub(crate) mod obj_mesh_test;
 pub mod spline_curves;
 pub mod camera;
 pub mod bindgrouperoo;
+mod obj_parser;
