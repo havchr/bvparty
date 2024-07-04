@@ -1,14 +1,32 @@
 use nalgebra::Vector3;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Vertex {
     pub position: Vector3<f32>,
-    pub normal: Option<Vector3<f32>>,
-    pub tex_coord: Option<(f32, f32)>,
+    pub normal: Vector3<f32>,
+    pub tex_coord: (f32, f32),
 }
 
+
+/*
+MultiIndexing Faces contains multiple lists with index information
+so, to find the normal for a face a face, we go like
+n1  = normals[face.normal_indices[0]]
+n2  = normals[face.normal_indices[1]]
+n3  = normals[face.normal_indices[2]]
+
+but realtime 3D really likes it if our face has one index like this :
+vertex1 = vertices[indices[0]]
+vertex2 = vertices[indices[1]]
+vertex3 = vertices[indices[2]]
+
+position1 = vertex1.position
+normal1= vertex1.normal
+and so on..
+ */
 #[derive(Debug)]
-pub struct Face {
+pub struct MultiIndexingFaces {
     pub vertices: Vec<usize>, // indices of the vertices
     pub normal_indices: Vec<usize>,
     pub tex_coord_indices: Vec<usize>,
@@ -18,7 +36,7 @@ pub struct Face {
 #[derive(Debug)]
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
-    pub faces: Vec<Face>,
+    pub faces: Vec<i32>,
 }
 
 impl Mesh {
@@ -41,6 +59,10 @@ impl Mesh {
         //Into Position, into Normals, into texture coords
         //But our realtime mesh will only have ONE index
         //into a vertex format that has all needed things associated with it.
+
+
+        //Also - now I am using a nalgebra, but I guess - just embrace all the libs until I
+        //find time or energy to start writing own stuff for fun...
 
 
         let file = File::open(path)?;
@@ -104,7 +126,7 @@ impl Mesh {
                         }
                     }
 
-                    faces.push(Face {
+                    faces.push(MultiIndexingFaces {
                         vertices: vertex_indices,
                         normal_indices,
                         tex_coord_indices,
@@ -123,7 +145,8 @@ impl Mesh {
             }
         }
 
-        let vertices = vertices
+        /*
+        let vertices: Vec<Vertex> = vertices
             .into_iter()
             .enumerate()
             .map(|(i, position)| Vertex {
@@ -133,6 +156,46 @@ impl Mesh {
             })
             .collect();
 
-        Ok(Mesh { vertices, faces })
+
+         */
+        let mut super_vertices : Vec<Vertex> = Vec::new();
+        let mut hits: HashMap<String,i32> = HashMap::new();
+        let mut super_faces: Vec<i32> = Vec::new();
+        for face in &faces{
+
+            let mut i = 0;
+            while i < face.vertices.len(){
+                let key: String = format!("{}/{}/{}",face.vertices[i],face.tex_coord_indices[i],face.normal_indices[i]);
+                match hits.get(&key){
+                   Some(index) => super_faces.push(*index),
+                    None => {
+
+                        //Collect all Vertex data
+                        let vertex : Vertex = Vertex{
+                            position: vertices[face.vertices[i]],
+                            normal: normals[face.normal_indices[i]],
+                            tex_coord: tex_coords[face.tex_coord_indices[i]],
+                        };
+
+                        let new_index = super_vertices.len() as i32;
+                        super_vertices.push(vertex);
+                        super_faces.push(new_index);
+                        hits.insert(key,new_index);
+                    }
+                }
+                i+=1;
+            }
+        }
+        /*
+        faces.into_iter()
+            .enumerate()
+            .map(|(i,face:MultiIndexingFaces)|) MultiIndexingFaces {
+
+
+        }).collect();
+        */
+
+
+        Ok(Mesh { vertices : super_vertices, faces  : super_faces})
     }
 }

@@ -289,6 +289,15 @@ impl State {
             &camera_uniform_buffer,
         ).unwrap();
 
+        let mesh_test = nocmp::obj_mesh_test::ObjMeshTest::create(
+            &device,
+            &toylike_uniforms,
+            &texture_bind_group_layout,
+            &config,
+            wgpu::include_wgsl!("shadertoys/test.wgsl"),
+            &camera_uniform_buffer,
+        ).unwrap();
+
 
         Self{
             surface,

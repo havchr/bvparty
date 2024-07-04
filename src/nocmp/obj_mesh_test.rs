@@ -11,6 +11,7 @@ use crate::nocmp::bindgrouperoo::BindGrouperoo;
 use crate::nocmp::spline_curves::CurvePoint;
 use std::fs::File;
 use std::io::Read;
+use crate::nocmp::obj_parser::Mesh;
 
 #[repr(C)]
 #[derive(Copy,Clone, Debug,bytemuck::Pod, bytemuck::Zeroable)]
@@ -106,6 +107,7 @@ impl ObjMeshTest{
 
 
         //todo - probably makes sense to read the mesh here?
+        let mesh = Mesh::parse_from_file("art/min_test_shared_tex_coords.obj");
 
         let mut mesh_vertices: [MeshVertex; mesh_resolution as usize]= [
             MeshVertex{
