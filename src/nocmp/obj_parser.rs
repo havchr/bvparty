@@ -1,11 +1,41 @@
 use nalgebra::Vector3;
+use nalgebra::Vector2;
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+struct BVec3(Vector3<f32>);
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+struct BVec2(Vector2<f32>);
+
+#[repr(C)]
+#[derive(Copy,Clone, Debug,bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
-    pub position: Vector3<f32>,
-    pub normal: Vector3<f32>,
-    pub tex_coord: (f32, f32),
+    pub position: BVec3,
+    pub normal: BVec3,
+    pub tex_coord: BVec2,
+}
+
+unsafe impl Zeroable for BVec3 {}
+unsafe impl Pod for BVec3 {}
+
+unsafe impl Zeroable for BVec2 {}
+unsafe impl Pod for BVec2 {}
+
+#[repr(C)]
+#[derive(Copy,Clone, Debug,bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ObjLoaderRealtimeVertex {
+    position: [f32;3],
+    normal: [f32;3],
+    uv: [f32;2],
+}
+
+#[repr(C)]
+#[derive(Copy,Clone, Debug,bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Face{
+    pub face_indices: [u32;3] // indices of the vertices
 }
 
 
@@ -26,7 +56,7 @@ normal1= vertex1.normal
 and so on..
  */
 #[derive(Debug)]
-pub struct MultiIndexingFaces {
+pub struct MultiIndexingFace {
     pub vertices: Vec<usize>, // indices of the vertices
     pub normal_indices: Vec<usize>,
     pub tex_coord_indices: Vec<usize>,
@@ -36,7 +66,9 @@ pub struct MultiIndexingFaces {
 #[derive(Debug)]
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
-    pub faces: Vec<i32>,
+    pub real_verts : Vec<ObjLoaderRealtimeVertex>,
+    pub faces: Vec<u32>,
+    pub feces: Vec<Face>,
 }
 
 impl Mesh {
@@ -44,12 +76,15 @@ impl Mesh {
         Mesh {
             vertices: Vec::new(),
             faces: Vec::new(),
+            feces: Vec::new(),
+            real_verts: Vec::new()
         }
     }
 }
 
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use bytemuck::{Pod, Zeroable};
 
 impl Mesh {
     pub fn parse_from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
@@ -88,20 +123,20 @@ impl Mesh {
                     let x: f32 = parts[1].parse()?;
                     let y: f32 = parts[2].parse()?;
                     let z: f32 = parts[3].parse()?;
-                    vertices.push(Vector3::new(x, y, z));
+                    vertices.push(BVec3(Vector3::new(x, y, z)));
                 }
                 "vn" => {
                     // Vertex normal
                     let x: f32 = parts[1].parse()?;
                     let y: f32 = parts[2].parse()?;
                     let z: f32 = parts[3].parse()?;
-                    normals.push(Vector3::new(x, y, z));
+                    normals.push(BVec3(Vector3::new(x, y, z)));
                 }
                 "vt" => {
                     // Vertex texture coordinate
                     let u: f32 = parts[1].parse()?;
                     let v: f32 = parts[2].parse()?;
-                    tex_coords.push((u, v));
+                    tex_coords.push(BVec2(Vector2::new(u,v)));
                 }
                 "f" => {
                     // Face
@@ -126,7 +161,7 @@ impl Mesh {
                         }
                     }
 
-                    faces.push(MultiIndexingFaces {
+                    faces.push(MultiIndexingFace {
                         vertices: vertex_indices,
                         normal_indices,
                         tex_coord_indices,
@@ -145,29 +180,22 @@ impl Mesh {
             }
         }
 
-        /*
-        let vertices: Vec<Vertex> = vertices
-            .into_iter()
-            .enumerate()
-            .map(|(i, position)| Vertex {
-                position,
-                normal: normals.get(i).cloned(),
-                tex_coord: tex_coords.get(i).cloned(),
-            })
-            .collect();
-
-
-         */
-        let mut super_vertices : Vec<Vertex> = Vec::new();
-        let mut hits: HashMap<String,i32> = HashMap::new();
-        let mut super_faces: Vec<i32> = Vec::new();
+        let mut realtime_vertices: Vec<Vertex> = Vec::new();
+        let mut super_realtime_vertices: Vec<ObjLoaderRealtimeVertex> = Vec::new();
+        let mut hits: HashMap<String,u32> = HashMap::new();
+        let mut realtime_faces: Vec<u32> = Vec::new();
+        let mut realtime_feces: Vec<Face> = Vec::new();
         for face in &faces{
 
             let mut i = 0;
+            let mut new_face : Face = Face { face_indices: [0,0,0] };
             while i < face.vertices.len(){
                 let key: String = format!("{}/{}/{}",face.vertices[i],face.tex_coord_indices[i],face.normal_indices[i]);
                 match hits.get(&key){
-                   Some(index) => super_faces.push(*index),
+                   Some(index) => {
+                       realtime_faces.push(*index);
+                       new_face.face_indices[i] = *index as u32;
+                   },
                     None => {
 
                         //Collect all Vertex data
@@ -177,25 +205,31 @@ impl Mesh {
                             tex_coord: tex_coords[face.tex_coord_indices[i]],
                         };
 
-                        let new_index = super_vertices.len() as i32;
-                        super_vertices.push(vertex);
-                        super_faces.push(new_index);
+                        let realtime_vertex : ObjLoaderRealtimeVertex = ObjLoaderRealtimeVertex {
+                           position : [vertex.position.0.x,vertex.position.0.y,vertex.position.0.z],
+                            normal : [vertex.normal.0.x,vertex.normal.0.y,vertex.normal.0.z],
+                            uv : [vertex.tex_coord.0.x,vertex.tex_coord.0.y]
+                        };
+
+                        let new_index = realtime_vertices.len() as u32;
+                        realtime_vertices.push(vertex);
+                        super_realtime_vertices.push(realtime_vertex);
+                        realtime_faces.push(new_index);
+                        new_face.face_indices[i] = new_index as u32;
                         hits.insert(key,new_index);
                     }
                 }
                 i+=1;
             }
+            realtime_feces.push(new_face);
         }
-        /*
-        faces.into_iter()
-            .enumerate()
-            .map(|(i,face:MultiIndexingFaces)|) MultiIndexingFaces {
 
+        Ok(Mesh {
+            vertices : realtime_vertices,
+            faces  : realtime_faces ,
+            feces : realtime_feces,
+            real_verts: super_realtime_vertices,
 
-        }).collect();
-        */
-
-
-        Ok(Mesh { vertices : super_vertices, faces  : super_faces})
+        })
     }
 }

@@ -121,6 +121,7 @@ struct State {
     buffer_a: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
     buffer_b: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
     buffer_screen: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
+    obj_mesh_test: nocmp::obj_mesh_test::ObjMeshTest,
     spline_test: nocmp::spline_test::SplineTest,
     toylike_uniforms: nocmp::shadertoy_buffer::ShaderToyUniforms,
     camera: nocmp::camera::Camera,
@@ -289,12 +290,12 @@ impl State {
             &camera_uniform_buffer,
         ).unwrap();
 
-        let mesh_test = nocmp::obj_mesh_test::ObjMeshTest::create(
+        let obj_mesh_test = nocmp::obj_mesh_test::ObjMeshTest::create(
             &device,
             &toylike_uniforms,
             &texture_bind_group_layout,
             &config,
-            wgpu::include_wgsl!("shadertoys/test.wgsl"),
+            wgpu::include_wgsl!("shadertoys/obj_test.wgsl"),
             &camera_uniform_buffer,
         ).unwrap();
 
@@ -316,6 +317,7 @@ impl State {
             buffer_screen,
             toylike_uniforms,
             spline_test,
+            obj_mesh_test,
             camera,
             camera_controller,
             camera_uniform,
@@ -363,7 +365,8 @@ impl State {
         
         //This renders to screen with texture_bind_group , which is our POOC scroller texture which is y = 8k, and thus very squashed without a shader with texture coordinate hacks
         self.buffer_screen.render_to_screen(&view_of_surface,&self.texture_bind_group,&self.toylike_uniforms,&mut encoder);
-        
+
+        self.obj_mesh_test.render_to_screen(&view_of_surface,&self.texture_bind_group,&self.toylike_uniforms,&mut encoder);
         //self.spline_test.render_to_screen(&view_of_surface,self.buffer_a.get_target_rtt_bindgroup(),&self.toylike_uniforms,&mut encoder,&self.queue);
 
         //submit will accept anythingthatimplements IntoIter

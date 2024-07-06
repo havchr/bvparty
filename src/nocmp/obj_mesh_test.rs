@@ -1,17 +1,16 @@
 /*
 This is some preliminary code to
-test rendering curves,
-todo - we should tesselate, right now we can only render thin lines
-and line width is not supported, so we should tesselate into nice lines.
+test rendering meshes,
  */
+
 use anyhow::*;
 use wgpu::util::DeviceExt;
 use crate::nocmp;
 use crate::nocmp::bindgrouperoo::BindGrouperoo;
-use crate::nocmp::spline_curves::CurvePoint;
 use std::fs::File;
 use std::io::Read;
-use crate::nocmp::obj_parser::Mesh;
+use std::mem::size_of;
+use crate::nocmp::obj_parser::{Face, Mesh};
 
 #[repr(C)]
 #[derive(Copy,Clone, Debug,bytemuck::Pod, bytemuck::Zeroable)]
@@ -39,7 +38,7 @@ impl MeshVertex{
                 },
                 wgpu::VertexAttribute {
                     offset: (std::mem::size_of::<[f32;3]>()*2) as wgpu::BufferAddress,
-                    shader_location: 1,
+                    shader_location: 2,
                     format: wgpu::VertexFormat::Float32x2,
                 }
             ]
@@ -69,30 +68,9 @@ pub struct ObjMeshTest{
     target_rtt_bindgroup : wgpu::BindGroup,
     uniform_groupio : BindGrouperoo,
     vertex_buffer: wgpu::Buffer,
-    mesh_vertices: [MeshVertex; mesh_resolution as usize],
+    index_buffer: wgpu::Buffer,
+    num_indices: u32,
 }
-
-impl ObjMeshTest {
-
-    fn load_mesh(mesh_vertices: &mut [MeshVertex; mesh_resolution as usize], time : f32) {
-        use nocmp::spline_curves;
-        let path = "art/small_test.obj";
-
-        // Open the file in read-only mode
-        let file = File::open(path).expect("Failed to open file");
-
-        // Read the contents of the file to a string
-        let mut contents = String::new();
-        let mut reader = std::io::BufReader::new(file);
-        reader.read_to_string(&mut contents).expect("Failed to read file");
-        println!("{}", &contents);
-
-        //todo - actually parse the mesh
-
-
-    }
-}
-
 
 impl ObjMeshTest{
 
@@ -106,17 +84,6 @@ impl ObjMeshTest{
     ) ->Result<Self>{
 
 
-        //todo - probably makes sense to read the mesh here?
-        let mesh = Mesh::parse_from_file("art/min_test_shared_tex_coords.obj");
-
-        let mut mesh_vertices: [MeshVertex; mesh_resolution as usize]= [
-            MeshVertex{
-                position: [0.0,0.0,0.0],
-                normal: [0.0,1.0,0.0],
-                uv : [0.0,0.0]
-            }
-            ; mesh_resolution as usize];
-        //let shader = device.create_shader_module(wgpu::include_wgsl!("../shadertoys/shader_buffer_a.wgsl"));
         let shader = device.create_shader_module(shader_descriptor);
 
         let target_rtt = nocmp::texture::Texture::create_rtt_texture(1024_u32,1024_u32,&device,Some("target rtt texture")).unwrap();
@@ -157,7 +124,7 @@ impl ObjMeshTest{
                 module: &shader,
                 entry_point: "vs_main",
                 buffers:&[
-                    MeshVertex::descy(),
+                    MeshVertex::desc(),
                 ],
             },
             fragment: Some(wgpu::FragmentState {
@@ -171,10 +138,10 @@ impl ObjMeshTest{
             }),
 
             primitive:wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::LineStrip,
+                topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
+                cull_mode: Some(wgpu::Face::Front),
                 //Setting this to anything other than Fill requires
                 //Features::NON_FILL_POLYGON_MODE
                 polygon_mode: wgpu::PolygonMode::Fill,
@@ -193,23 +160,40 @@ impl ObjMeshTest{
         });
 
 
+
+
+
+        let mesh = Mesh::parse_from_file("art/big_test.obj").unwrap();
+
         let vertex_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer for mesh"),
-                contents: bytemuck::cast_slice(&mesh_vertices),
+                label: Some("obj vertex buffer"),
+                contents: bytemuck::cast_slice(&mesh.real_verts.as_slice()),
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             }
         );
 
+        let index_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("obj index Buffer"),
+                contents: bytemuck::cast_slice(&mesh.faces.as_slice()),
+                usage: wgpu::BufferUsages::INDEX,
+            }
+        );
+
+        let face_size =  mesh.feces[0].face_indices.len();
+        let num_indices= (mesh.feces.len() * face_size)  as u32;
+        let num_indices= mesh.faces.len() as u32;
 
 
         Ok(Self{
             render_pipeline,
-            vertex_buffer,
             target_rtt,
             target_rtt_bindgroup,
-            mesh_vertices,
             uniform_groupio,
+            index_buffer,
+            vertex_buffer,
+            num_indices,
         })
     }
 
@@ -258,15 +242,12 @@ impl ObjMeshTest{
         view: &wgpu::TextureView,
         textures_group: &wgpu::BindGroup,
         toylike_uniforms : &nocmp::shadertoy_buffer::ShaderToyUniforms,
-        encoder: &mut wgpu::CommandEncoder,
-        queue : &wgpu::Queue
+        encoder: &mut wgpu::CommandEncoder
     )
     {
 
-        //todo - convert from proof of concept to something more usable.
-        queue.write_buffer(&self.vertex_buffer,0,bytemuck::cast_slice(&self.mesh_vertices[0..mesh_resolution as usize]));
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("My First Render Pass to RTT"),
+            label: Some("My First Render Pass to the screen"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment{
                 view: &view,
                 resolve_target: None,
@@ -284,11 +265,13 @@ impl ObjMeshTest{
         });
 
         render_pass.set_pipeline(&self.render_pipeline);
-        //render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
-        //render_pass.set_bind_group(0,&toylike_uniforms.uniform_bind_group,&[]);
+
+        //this one has camera stuff in it.
         render_pass.set_bind_group(0,&self.uniform_groupio.bind_group,&[]);
+        //render_pass.set_bind_group(0,&toylike_uniforms.uniform_bind_group,&[]);
         render_pass.set_bind_group(1,textures_group,&[]);
         render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
-        render_pass.draw(0..mesh_resolution, 0..1);
+        render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint32);
+        render_pass.draw_indexed(0..self.num_indices,0,0..1);
     }
 }
