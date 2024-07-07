@@ -10,7 +10,9 @@ use crate::nocmp::bindgrouperoo::BindGrouperoo;
 use std::fs::File;
 use std::io::Read;
 use std::mem::size_of;
+use wgpu::StoreOp;
 use crate::nocmp::obj_parser::{Face, Mesh};
+use crate::nocmp::texture;
 
 #[repr(C)]
 #[derive(Copy,Clone, Debug,bytemuck::Pod, bytemuck::Zeroable)]
@@ -123,6 +125,7 @@ impl ObjMeshTest{
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
+                compilation_options: Default::default(),
                 buffers:&[
                     MeshVertex::desc(),
                 ],
@@ -130,6 +133,7 @@ impl ObjMeshTest{
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: "fs_main",
+                compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: surface_config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
@@ -141,7 +145,7 @@ impl ObjMeshTest{
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Front),
+                cull_mode: Some(wgpu::Face::Back),
                 //Setting this to anything other than Fill requires
                 //Features::NON_FILL_POLYGON_MODE
                 polygon_mode: wgpu::PolygonMode::Fill,
@@ -150,7 +154,15 @@ impl ObjMeshTest{
                 //Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
             },
-            depth_stencil:None,
+            depth_stencil:Some(
+                wgpu::DepthStencilState{
+                    format: nocmp::texture::Texture::DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare : wgpu::CompareFunction::Less,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }
+            ),
             multisample: wgpu::MultisampleState {
                 count: 1,
                 mask: !0,
@@ -163,7 +175,7 @@ impl ObjMeshTest{
 
 
 
-        let mesh = Mesh::parse_from_file("art/scroller.obj").unwrap();
+        let mesh = Mesh::parse_from_file("art/big_test.obj").unwrap();
 
         let vertex_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -201,45 +213,11 @@ impl ObjMeshTest{
         &self.target_rtt_bindgroup
     }
 
-    pub fn render_to_own_buffer(
-        self: &mut Self,
-        textures_group: &wgpu::BindGroup,
-        toylike_uniforms : &nocmp::shadertoy_buffer::ShaderToyUniforms,
-        encoder: &mut wgpu::CommandEncoder,
-    )
-    {
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("My First Render Pass to RTT"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment{
-        view: &self.target_rtt.view,
-        resolve_target: None,
-        ops: wgpu::Operations {
-        load: wgpu::LoadOp::Clear(wgpu::Color {
-        r: 0.1,
-        g: 0.8,
-        b: 0.3,
-        a: 1.0,
-        }),
-        store: true,
-        },
-        })],
-        depth_stencil_attachment: None,
-        });
-
-        render_pass.set_pipeline(&self.render_pipeline);
-        //render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
-        render_pass.set_bind_group(0,&toylike_uniforms.uniform_bind_group,&[]);
-        render_pass.set_bind_group(1,textures_group,&[]);
-        render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
-        //render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
-        //render_pass.draw_indexed(0..self.num_indices,0,0..1);
-        render_pass.draw(0..mesh_resolution, 0..1);
-        //render_pass.draw(0..self.num_vertices,0..1);
-    }
 
     pub fn render_to_screen(
         self: &mut Self,
         view: &wgpu::TextureView,
+        depth_view: &wgpu::TextureView,
         textures_group: &wgpu::BindGroup,
         toylike_uniforms : &nocmp::shadertoy_buffer::ShaderToyUniforms,
         encoder: &mut wgpu::CommandEncoder
@@ -258,10 +236,25 @@ impl ObjMeshTest{
                         b: 0.3,
                         a: 1.0,
                     }),
-                    store: true,
+                    store: StoreOp::Store,
                 },
             })],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: Some
+                (wgpu::RenderPassDepthStencilAttachment
+                {
+                    view: &depth_view,
+                    depth_ops: Some(
+                        wgpu::Operations
+                        {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: wgpu::StoreOp::Store,
+                        }
+                    ),
+                    stencil_ops:None
+                }
+                ),
+            timestamp_writes: None,
+            occlusion_query_set: None,
         });
 
         render_pass.set_pipeline(&self.render_pipeline);

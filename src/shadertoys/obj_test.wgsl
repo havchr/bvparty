@@ -55,9 +55,10 @@ fn vs_main(
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 	var texSample : vec4<f32> = textureSample(t_diffuse,s_diffuse,in.uv);
-	texSample.r = dot(in.normal,vec3<f32>(0.0,-1.0,0.0));
-	texSample.g = sin(uniforms.iTime*5.0);
-	texSample.b = uniforms.iMouse[2] * dot(in.normal,vec3<f32>(0.0,-1.0,0.0));
+	var sun : vec3<f32> = vec3<f32>(-0.57,-0.57,0.57);
+	texSample.r = dot(in.normal,sun);
+	texSample.g = dot(in.normal,sun);
+	texSample.b = dot(in.normal,sun);
 	texSample.a = 1.0;
 	return texSample;
 }

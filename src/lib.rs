@@ -12,111 +12,28 @@ use winit::{
 use wgpu::util::DeviceExt;
 use instant::Duration;
 use rodio::{Decoder, OutputStream, Source};
+use wgpu::Gles3MinorVersion;
 use winit::dpi::{PhysicalSize, Size};
+use winit::keyboard::{KeyCode, PhysicalKey};
 
 
-pub async fn run() {
-    env_logger::init();
-    let event_loop = EventLoop::new();
-    let window_size = Size::from(PhysicalSize::new(1024,1024));
-    let window = WindowBuilder::new().with_inner_size(window_size).build(&event_loop).unwrap();
-
-    let mut state = State::new(window).await;
-    let mut last_render_time = instant::Instant::now();
-
-
-    //Try playing music.. 
-    // Get an output stream handle to the default physical sound device
-    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-    // Load a sound from a file, using a path relative to Cargo.toml
-    let file = BufReader::new(File::open("art/track.wav").unwrap());
-    // Decode that sound file into a source
-    let source = Decoder::new(file).unwrap();
-    // Play the sound directly on the device
-    stream_handle.play_raw(source.convert_samples());
-    let start_time = instant::Instant::now();
-
-
-
-    event_loop.run(move |event, _, control_flow |{
-        match event {
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if window_id == state.window().id() => {
-                state.camera_controller.process_events(&event);
-                if !state.input(event) {
-                    match event {
-                        WindowEvent::CloseRequested
-                            | WindowEvent::KeyboardInput {
-                                input: 
-                                    KeyboardInput {
-                                        state: ElementState::Pressed,
-                                        virtual_keycode: Some(VirtualKeyCode::Escape),
-                                        ..
-                                    },
-                                    ..
-                            } => *control_flow = ControlFlow::Exit,
-                            WindowEvent::Resized(physical_size) => {
-                                state.resize(*physical_size);
-                            }
-                        WindowEvent::CursorMoved {position,..} => {
-                            state.update_mousexy(position.x,position.y);
-                        }
-
-                        WindowEvent::MouseInput{state:element_state,button,..} => {
-                            //handle mouse input event...
-                            state.update_mouse_event(element_state,button);
-                        }
-
-                        WindowEvent::ScaleFactorChanged {new_inner_size,..} => {
-                            //new_inner_size is &&mut so we have to deref twice.
-                            state.resize(**new_inner_size);
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            Event::RedrawRequested(window_id) if window_id == state.window().id() => {
-                let now = instant::Instant::now();
-                let delta_time = now - last_render_time;
-
-
-                state.draw_sync_test(&start_time);
-                state.update(delta_time);
-                last_render_time = now;
-                match state.render() {
-                    Ok(_) => {}
-                    //reconfigure the surface if it's lost or outdated
-                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                        state.resize(state.size)
-                    }
-                    //System out of memory ooops.
-                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
-                }
-            }
-            Event::RedrawEventsCleared => {
-                //RedrawRequested willonly trigger once,unlesswemanually request it
-                state.window().request_redraw();
-           }
-            _=> {}
-        }
-    });
-}
 
 use winit::window::Window;
 
-struct State {
-    surface: wgpu::Surface,
+struct State<'demo_lifetime> {
+    surface: wgpu::Surface<'demo_lifetime>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
-    window: Window,
+    //The window must be declared after the surface so
+    //it gets dropped after it(the surface), because
+    //the surface contains unsafe references to the windows resources
+    window: &'demo_lifetime Window,
     dif_tex_1: nocmp::texture::Texture,
     dif_tex_2: nocmp::texture::Texture,
     rtt_tex: nocmp::texture::Texture,
+    depth_texture : nocmp::texture::Texture,
     texture_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group: wgpu::BindGroup,
     buffer_a: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
@@ -132,7 +49,7 @@ struct State {
 
 }
 
-impl State {
+impl<'demo_lifetime> State<'demo_lifetime> {
 
     pub fn update_mousexy(&mut self, mx: f64, my: f64) {
         self.toylike_uniforms.uniforms.iMouse[0] = mx as f32;
@@ -174,7 +91,7 @@ impl State {
         }
     }
     //Creating some of the wgpu types requires async code
-    async fn new(window: Window) -> Self {
+    async fn new(window: &'demo_lifetime Window) -> State<'demo_lifetime> {
         let size = window.inner_size();
 
 
@@ -183,13 +100,11 @@ impl State {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor{
             backends: wgpu::Backends::all(),
             dx12_shader_compiler: Default::default(),
+            flags: wgpu::InstanceFlags::debugging(),
+            gles_minor_version: Gles3MinorVersion::Automatic
         });
 
-        // #Safety
-        //
-        // The surface needs to live as long as the window that created
-        // it , State owns the window , sol this should be safe?.. I guess.
-        let surface = unsafe{ instance.create_surface(&window) }.unwrap();
+        let surface =  instance.create_surface(window).unwrap();
 
 
         let adapter = instance.request_adapter(
@@ -203,8 +118,8 @@ impl State {
         //let us create the device and queue
         let(device,queue) = adapter.request_device(
             &wgpu::DeviceDescriptor {
-                features: wgpu::Features::empty(),
-                limits: if cfg!(target_arch = "wasm32"){
+                required_features: wgpu::Features::empty(),
+                required_limits: if cfg!(target_arch = "wasm32"){
                     wgpu::Limits::downlevel_webgl2_defaults()
                 } else {
                     wgpu::Limits::default()
@@ -233,9 +148,12 @@ impl State {
             height: size.height,
             present_mode: surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
+            desired_maximum_frame_latency:2,
             view_formats: vec![],
         };
         surface.configure(&device,&config);
+
+        let depth_texture = nocmp::texture::Texture::create_depth_texture(&device,&config,"nocmp depth texture");
 
         let toylike_uniforms = nocmp::shadertoy_buffer::ShaderToyUniforms::new(&device).unwrap();
 
@@ -313,6 +231,7 @@ impl State {
             dif_tex_1,
             dif_tex_2,
             rtt_tex,
+            depth_texture,
             buffer_a,
             buffer_b,
             buffer_screen,
@@ -337,9 +256,12 @@ impl State {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
 
+            self.depth_texture = nocmp::texture::Texture::create_depth_texture(&self.device,&self.config,"depth texture");
+
             self.toylike_uniforms.uniforms.iResolution[0] = new_size.width as f32;
             self.toylike_uniforms.uniforms.iResolution[1] = new_size.height as f32;
             self.surface.configure(&self.device,&self.config);
+
         }
     }
 
@@ -350,11 +272,13 @@ impl State {
     fn update(&mut self,delta_time: instant::Duration) {
         self.toylike_uniforms.uniforms.iTime += delta_time.as_secs_f32().max(f32::MIN_POSITIVE);
         self.toylike_uniforms.push_buffer_to_gfx_card(&self.queue);
-        //self.camera_uniform.view_proj[0][0] =self.toylike_uniforms.uniforms.iTime.sin();
 
 
         self.camera_controller.update_camera(&mut self.camera);
+
         self.camera_uniform.update_view_proj(&self.camera);
+
+        //self.camera_uniform.view_proj[0][0] =self.toylike_uniforms.uniforms.iTime.sin();
         let mut i = 0;
         while i < self.camera_uniform.view_proj[0].len()
         {
@@ -367,6 +291,7 @@ impl State {
                      self.camera_uniform.view_proj[i][3]);
            i+=1;
         }
+
         self.queue.write_buffer(&self.camera_uniform_buffer,0,bytemuck::cast_slice(&[self.camera_uniform]));
     }
 
@@ -385,7 +310,7 @@ impl State {
         //This renders to screen with texture_bind_group , which is our POOC scroller texture which is y = 8k, and thus very squashed without a shader with texture coordinate hacks
         self.buffer_screen.render_to_screen(&view_of_surface,&self.texture_bind_group,&self.toylike_uniforms,&mut encoder);
 
-        self.obj_mesh_test.render_to_screen(&view_of_surface,&self.texture_bind_group,&self.toylike_uniforms,&mut encoder);
+        self.obj_mesh_test.render_to_screen(&view_of_surface, &self.depth_texture.view, &self.texture_bind_group, &self.toylike_uniforms, &mut encoder);
         //self.spline_test.render_to_screen(&view_of_surface,self.buffer_a.get_target_rtt_bindgroup(),&self.toylike_uniforms,&mut encoder,&self.queue);
 
         //submit will accept anythingthatimplements IntoIter
@@ -396,3 +321,160 @@ impl State {
     }
 }
 
+pub async fn run() {
+    env_logger::init();
+    let event_loop = EventLoop::new().unwrap();
+    let window_size = Size::from(PhysicalSize::new(1024,1024));
+    let window = WindowBuilder::new().build(&event_loop).unwrap();
+
+
+
+    //Try playing music..
+    // Get an output stream handle to the default physical sound device
+    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+    // Load a sound from a file, using a path relative to Cargo.toml
+    let file = BufReader::new(File::open("art/track.wav").unwrap());
+    // Decode that sound file into a source
+    let source = Decoder::new(file).unwrap();
+    // Play the sound directly on the device
+
+    //stream_handle.play_raw(source.convert_samples());
+
+    let start_time = instant::Instant::now();
+    let mut last_render_time = instant::Instant::now();
+
+    let mut state = State::new(&window).await;
+    let mut surface_configured = false;
+
+    event_loop
+        .run(move |event, control_flow|
+        {
+
+            match event {
+                Event::WindowEvent {
+                    ref event,
+                    window_id,
+                }  if window_id == state.window.id() => {
+                    state.camera_controller.process_events(&event);
+                    state.input(&event);
+                    match event {
+                        WindowEvent::CloseRequested
+                        | WindowEvent::KeyboardInput {
+                            event:
+                            KeyEvent {
+                                state: ElementState::Pressed,
+                                physical_key: PhysicalKey::Code(KeyCode::Escape),
+                                ..
+                            },
+                            ..
+                        } => control_flow.exit(),
+                        WindowEvent::Resized(physical_size) => {
+                            log::info!("physical_size: {physical_size:?}") ;
+                            surface_configured = true;
+                            state.resize(*physical_size);
+                        }
+                        WindowEvent::RedrawRequested => {
+                            state.window().request_redraw();
+                            if !surface_configured{
+                                return;
+                            }
+
+                            let now = instant::Instant::now();
+                            let delta_time = now - last_render_time;
+
+
+                            state.draw_sync_test(&start_time);
+                            state.update(delta_time);
+
+                            last_render_time = now;
+                            match state.render() {
+                                Ok(_) => {}
+                                //reconfigure the surface if it's lost or outdated
+                                Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                                    state.resize(state.size)
+                                }
+                                //System out of memory ooops.
+                                Err(wgpu::SurfaceError::OutOfMemory) => {
+                                    log::error!("OutOfMemory");
+                                    control_flow.exit();
+                                },
+                                Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
+                            }
+                        }
+                        _ => {}
+                    }
+                },
+
+                _ => {}
+            }
+        }).unwrap();
+
+
+
+
+    /*
+    event_loop.run(move |event,  control_flow | match event {
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if window_id == state.window().id() => {
+                state.camera_controller.process_events(&event);
+                if !state.input(event) {
+                    match event {
+                        WindowEvent::CloseRequested
+                            | WindowEvent::KeyboardInput {
+                                event:
+                                    KeyEvent{
+                                        state: ElementState::Pressed,
+                                        physical_key : PhysicalKey::Code(KeyCode::Escape),
+                                        ..
+                                    },
+                                    ..
+                            } => *control_flow = ControlFlow::Exit,
+                            WindowEvent::Resized(physical_size) => {
+                                state.resize(*physical_size);
+                            }
+                        WindowEvent::CursorMoved {position,..} => {
+                            state.update_mousexy(position.x,position.y);
+                        }
+
+                        WindowEvent::MouseInput{state:element_state,button,..} => {
+                            //handle mouse input event...
+                            state.update_mouse_event(element_state,button);
+                        }
+
+                        WindowEvent::ScaleFactorChanged {new_inner_size,..} => {
+                            //new_inner_size is &&mut so we have to deref twice.
+                            state.resize(**new_inner_size);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Event::RedrawRequested(window_id) if window_id == state.window().id() => {
+                let now = instant::Instant::now();
+                let delta_time = now - last_render_time;
+
+
+                state.draw_sync_test(&start_time);
+                state.update(delta_time);
+                last_render_time = now;
+                match state.render() {
+                    Ok(_) => {}
+                    //reconfigure the surface if it's lost or outdated
+                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                        state.resize(state.size)
+                    }
+                    //System out of memory ooops.
+                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                    Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
+                }
+            }
+            Event::RedrawEventsCleared => {
+                //RedrawRequested willonly trigger once,unlesswemanually request it
+                state.window().request_redraw();
+           }
+            _=> {}
+        }
+    });*/
+}

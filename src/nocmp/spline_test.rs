@@ -11,6 +11,7 @@ use crate::nocmp::bindgrouperoo::BindGrouperoo;
 use crate::nocmp::spline_curves::CurvePoint;
 use std::fs::File;
 use std::io::Read;
+use wgpu::StoreOp;
 
 #[repr(C)]
 #[derive(Copy,Clone, Debug,bytemuck::Pod, bytemuck::Zeroable)]
@@ -183,6 +184,7 @@ impl SplineTest{
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
+                compilation_options: Default::default(),
                 buffers:&[
                     SplineVertex::descy(),
                 ],
@@ -190,6 +192,7 @@ impl SplineTest{
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: "fs_main",
+                compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: surface_config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
@@ -264,10 +267,12 @@ impl SplineTest{
         b: 0.3,
         a: 1.0,
         }),
-        store: true,
+        store: StoreOp::Store,
         },
         })],
         depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
         });
 
         render_pass.set_pipeline(&self.render_pipeline);
@@ -306,10 +311,12 @@ impl SplineTest{
                         b: 0.3,
                         a: 1.0,
                     }),
-                    store: true,
+                    store: StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
         });
 
         render_pass.set_pipeline(&self.render_pipeline);

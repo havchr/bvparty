@@ -6,6 +6,8 @@ use winit::{
 
 use wgpu::util::DeviceExt;
 use anyhow::*;
+use winit::event::WindowEvent::KeyboardInput;
+use winit::keyboard::{KeyCode, PhysicalKey};
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -94,39 +96,58 @@ impl CameraController {
         }
     }
 
+    /*
+
+                    match event {
+                        WindowEvent::CloseRequested
+                        | WindowEvent::KeyboardInput {
+                            event:
+                            KeyEvent {
+                                state: ElementState::Pressed,
+                                physical_key: PhysicalKey::Code(KeyCode::Escape),
+                                ..
+                            },
+                            ..
+                        } => control_flow.exit(),
+     */
+
     pub fn process_events(&mut self, event: &WindowEvent) -> bool {
         match event {
-            WindowEvent::KeyboardInput {
-                input: KeyboardInput {
+            //match All Pressed Keys
+            WindowEvent::KeyboardInput
+            {
+                event: KeyEvent{
                     state,
-                    virtual_keycode: Some(keycode),
+                    physical_key: keycode,
                     ..
                 },
                 ..
-            } => {
-                let is_pressed = *state == ElementState::Pressed;
-                match keycode {
-                    VirtualKeyCode::W | VirtualKeyCode::Up => {
+            }=> {
+               let is_pressed = *state == ElementState::Pressed;
+                return match keycode {
+                    PhysicalKey::Code(KeyCode::KeyW) | PhysicalKey::Code(KeyCode::ArrowUp) => {
                         self.is_forward_pressed = is_pressed;
                         true
                     }
-                    VirtualKeyCode::A | VirtualKeyCode::Left => {
+                    PhysicalKey::Code(KeyCode::KeyA) | PhysicalKey::Code(KeyCode::ArrowLeft) => {
                         self.is_left_pressed = is_pressed;
                         true
                     }
-                    VirtualKeyCode::S | VirtualKeyCode::Down => {
+                    PhysicalKey::Code(KeyCode::KeyS) | PhysicalKey::Code(KeyCode::ArrowDown) => {
                         self.is_backward_pressed = is_pressed;
                         true
                     }
-                    VirtualKeyCode::D | VirtualKeyCode::Right => {
+                    PhysicalKey::Code(KeyCode::KeyD) | PhysicalKey::Code(KeyCode::ArrowRight) => {
                         self.is_right_pressed = is_pressed;
                         true
                     }
                     _ => false,
-                }
             }
-            _ => false,
+
         }
+            _ => {return false;}
+        }
+        false
     }
 
     pub fn update_camera(&self, camera: &mut Camera) {

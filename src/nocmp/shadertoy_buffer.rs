@@ -2,6 +2,7 @@
 This creates a pipeline with a render-texture like a buffer in shadertoy.
  */
 use anyhow::*;
+use wgpu::StoreOp;
 use wgpu::util::DeviceExt;
 use crate::nocmp;
 
@@ -195,6 +196,7 @@ impl ShaderToylikeBuffer{
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
+                compilation_options: Default::default(),
                 buffers:&[
                     Vertex::descy(),
                 ],
@@ -202,6 +204,7 @@ impl ShaderToylikeBuffer{
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: "fs_main",
+                compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: surface_config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
@@ -284,10 +287,12 @@ impl ShaderToylikeBuffer{
         b: 0.3,
         a: 1.0,
         }),
-        store: true,
+        store: StoreOp::Store,
         },
         })],
         depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
         });
 
         render_pass.set_pipeline(&self.render_pipeline);
@@ -320,10 +325,12 @@ impl ShaderToylikeBuffer{
                         b: 0.3,
                         a: 1.0,
                     }),
-                    store: true,
+                    store: StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
         });
 
 
