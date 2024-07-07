@@ -5,6 +5,7 @@ use anyhow::*;
 use wgpu::StoreOp;
 use wgpu::util::DeviceExt;
 use crate::nocmp;
+use crate::nocmp::camera::CameraUniform;
 
 #[repr(C)]
 #[derive(Copy,Clone, Debug,bytemuck::Pod, bytemuck::Zeroable)]

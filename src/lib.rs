@@ -188,7 +188,7 @@ impl<'demo_lifetime> State<'demo_lifetime> {
             // +z is out of the screen
             eye: (0.0, 1.0, 2.0).into(),
             // have it look at the origin
-            target: (0.0, 0.0, 0.0).into(),
+            target: (0.0, 1.0, 0.0).into(),
             // which way is "up"
             up: cgmath::Vector3::unit_y(),
             aspect: config.width as f32 / config.height as f32,
@@ -216,6 +216,7 @@ impl<'demo_lifetime> State<'demo_lifetime> {
             &config,
             wgpu::include_wgsl!("shadertoys/obj_test.wgsl"),
             &camera_uniform_buffer,
+            &queue
         ).unwrap();
 
 

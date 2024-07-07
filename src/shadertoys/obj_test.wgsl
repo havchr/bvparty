@@ -5,8 +5,18 @@ iResolution: vec2<f32>,
 iTime:f32,
 };
 
-struct VertUniforms {
+struct VertUniforms{
 view_proj: mat4x4<f32>,
+};
+
+
+struct MaterialUniforms{
+color : vec4<f32>
+};
+
+//modelUniforms typically change per draw-call
+struct ModelUniforms {
+model_matrix: mat4x4<f32>,
 };
 
 // https://toji.dev/webgpu-best-practices/bind-groups.html
@@ -17,12 +27,22 @@ view_proj: mat4x4<f32>,
 
 @group(0) @binding(0)
 var<uniform> uniforms: Uniforms;
+
 @group(0) @binding(1)
 var<uniform> vert_uniforms: VertUniforms;
+
+
 @group(1) @binding(0)
-var t_diffuse: texture_2d<f32>;
+var<uniform> material_uniforms: MaterialUniforms;
 @group(1) @binding(1)
+var t_diffuse: texture_2d<f32>;
+@group(1) @binding(2)
 var s_diffuse: sampler;
+
+@group(2) @binding(0)
+var<uniform> model_uniforms: ModelUniforms;
+
+
 
 struct VertexInput {
 	@location(0) position: vec3<f32>,
@@ -43,7 +63,7 @@ fn vs_main(
 )-> VertexOutput {
 	var out: VertexOutput;
 	out.normal = model.normal;
-	out.clip_position = vert_uniforms.view_proj * vec4<f32>(model.position, 1.0);
+	out.clip_position = vert_uniforms.view_proj * model_uniforms.model_matrix * vec4<f32>(model.position, 1.0);
 	out.uv = model.uv;
 
 	return out;
