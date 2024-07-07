@@ -44,6 +44,7 @@ pub async fn run() {
                 ref event,
                 window_id,
             } if window_id == state.window().id() => {
+                state.camera_controller.process_events(&event);
                 if !state.input(event) {
                     match event {
                         WindowEvent::CloseRequested
@@ -277,7 +278,7 @@ impl State {
             z_near: 0.1,
             z_far: 100.0,
         };
-        let camera_controller = nocmp::camera::CameraController::new(5.0);
+        let camera_controller = nocmp::camera::CameraController::new(0.05);
         let mut camera_uniform = nocmp::camera::CameraUniform::new();
         let camera_uniform_buffer = camera_uniform.create_buffer(&device).unwrap();
 
@@ -349,6 +350,24 @@ impl State {
     fn update(&mut self,delta_time: instant::Duration) {
         self.toylike_uniforms.uniforms.iTime += delta_time.as_secs_f32().max(f32::MIN_POSITIVE);
         self.toylike_uniforms.push_buffer_to_gfx_card(&self.queue);
+        //self.camera_uniform.view_proj[0][0] =self.toylike_uniforms.uniforms.iTime.sin();
+
+
+        self.camera_controller.update_camera(&mut self.camera);
+        self.camera_uniform.update_view_proj(&self.camera);
+        let mut i = 0;
+        while i < self.camera_uniform.view_proj[0].len()
+        {
+
+
+            println!("matrix!!");
+            println!("matrix {},{},{},{}",self.camera_uniform.view_proj[i][0],
+                     self.camera_uniform.view_proj[i][1],
+                     self.camera_uniform.view_proj[i][2],
+                     self.camera_uniform.view_proj[i][3]);
+           i+=1;
+        }
+        self.queue.write_buffer(&self.camera_uniform_buffer,0,bytemuck::cast_slice(&[self.camera_uniform]));
     }
 
     fn render(&mut self) -> Result<(),wgpu::SurfaceError> {

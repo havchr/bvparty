@@ -163,7 +163,7 @@ impl ObjMeshTest{
 
 
 
-        let mesh = Mesh::parse_from_file("art/big_test.obj").unwrap();
+        let mesh = Mesh::parse_from_file("art/scroller.obj").unwrap();
 
         let vertex_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {

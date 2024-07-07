@@ -43,7 +43,7 @@ fn vs_main(
 )-> VertexOutput {
 	var out: VertexOutput;
 	out.normal = model.normal;
-	out.clip_position = vec4<f32>(model.position, 1.0);
+	out.clip_position = vert_uniforms.view_proj * vec4<f32>(model.position, 1.0);
 	out.uv = model.uv;
 
 	return out;
@@ -55,9 +55,9 @@ fn vs_main(
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 	var texSample : vec4<f32> = textureSample(t_diffuse,s_diffuse,in.uv);
-	texSample.r = 1.0;
+	texSample.r = dot(in.normal,vec3<f32>(0.0,-1.0,0.0));
 	texSample.g = sin(uniforms.iTime*5.0);
-	texSample.b = uniforms.iMouse[2];
+	texSample.b = uniforms.iMouse[2] * dot(in.normal,vec3<f32>(0.0,-1.0,0.0));
 	texSample.a = 1.0;
 	return texSample;
 }
