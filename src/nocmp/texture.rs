@@ -77,7 +77,7 @@ impl Texture {
         Ok(Self { texture, sampler, view: texture_view})
     }
 
-    pub fn create_rtt_texture(width: u32, height: u32, device: &wgpu::Device, label: Option<&str>)
+    pub fn create_rtt_texture(width: u32, height: u32, device: &wgpu::Device,format : wgpu::TextureFormat, label: Option<&str>)
     -> Result<Self>
     {
         let texture_descriptor_rtt = wgpu::TextureDescriptor {
@@ -90,7 +90,7 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         };

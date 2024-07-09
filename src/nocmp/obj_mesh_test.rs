@@ -114,7 +114,7 @@ impl ObjMeshTest{
         let dif_tex_1= nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("../../art/scroll_test.png"),"testing").unwrap();
        // let dif_tex_2= nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing imagetest").unwrap();
 
-        let target_rtt = nocmp::texture::Texture::create_rtt_texture(1024_u32,1024_u32,&device,Some("target rtt texture")).unwrap();
+        let target_rtt = nocmp::texture::Texture::create_rtt_texture(1024_u32,1024_u32,&device,surface_config.format,Some("target rtt texture")).unwrap();
         let (bind_group_layout,target_rtt_bindgroup) = nocmp::texture::setup_texture_stage(
             &device,
             &[&target_rtt],

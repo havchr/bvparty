@@ -173,7 +173,7 @@ impl ShaderToylikeBuffer{
         //let shader = device.create_shader_module(wgpu::include_wgsl!("../shadertoys/shader_buffer_a.wgsl"));
         let shader = device.create_shader_module(shader_descriptor);
 
-        let target_rtt = nocmp::texture::Texture::create_rtt_texture(4096_u32*2,4096_u32*2,&device,Some("target rtt texture")).unwrap();
+        let target_rtt = nocmp::texture::Texture::create_rtt_texture(4096_u32*2,4096_u32*2,&device,surface_config.format,Some("target rtt texture")).unwrap();
         let (bind_group_layout,target_rtt_bindgroup) = nocmp::texture::setup_texture_stage(
             &device,
             &[&target_rtt],

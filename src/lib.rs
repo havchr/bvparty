@@ -63,7 +63,7 @@ impl<'demo_lifetime> State<'demo_lifetime> {
         let elapsed = song_time.elapsed();
         let elapsed_millis = elapsed.as_millis();
         let is_beat = elapsed_millis % 469 <= 55;
-        let is_beat_x2 = elapsed_millis % (469/4) <= 60;
+        let is_beat_x2 = elapsed_millis % (469/2) <= 60;
 
         if is_beat_x2{
             self.dancer_frame += 1;
@@ -141,7 +141,6 @@ impl<'demo_lifetime> State<'demo_lifetime> {
 
         let dif_tex_1= nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("../art/scroll_test.png"),"testing").unwrap();
         let dif_tex_2= nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing imagetest").unwrap();
-        let rtt_tex= nocmp::texture::Texture::create_rtt_texture(1024,1024,&device,Some("rtt_nocmp_test")).unwrap();
 
         let (texture_bind_group_layout,texture_bind_group) = nocmp::texture::setup_texture_stage(&device, &[&dif_tex_1], Some("Just one texture")).unwrap();
 
@@ -151,6 +150,9 @@ impl<'demo_lifetime> State<'demo_lifetime> {
             .copied()
             .find(|f| *f == wgpu::TextureFormat::Rgba8Unorm)
             .unwrap_or(surface_caps.formats[0]);
+
+        let rtt_tex= nocmp::texture::Texture::create_rtt_texture(1024,1024,&device,surface_format,Some("rtt_nocmp_test")).unwrap();
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
