@@ -10,6 +10,7 @@ use crate::nocmp::bindgrouperoo::BindGrouperoo;
 use std::fs::File;
 use std::io::Read;
 use std::mem::size_of;
+use std::ops::Deref;
 use cgmath::SquareMatrix;
 use wgpu::{BindGroupLayoutDescriptor, Buffer, StoreOp};
 use crate::nocmp::obj_parser::{Face, Mesh};
@@ -104,6 +105,7 @@ impl ObjMeshTest{
         shader_descriptor: wgpu::ShaderModuleDescriptor,
         camera_uniform_buffer : &wgpu::Buffer,
         queue : &wgpu::Queue,
+        mesh_file : &str,
     ) ->Result<Self>{
 
 
@@ -347,10 +349,14 @@ impl ObjMeshTest{
         });
 
 
-
-
-
-        let mesh = Mesh::parse_from_file("art/scroller.obj").unwrap();
+        let mesh = match Mesh::parse_from_file(mesh_file){
+            Result::Ok(mesh) => {mesh}
+            Err(e) => {
+               println!("failed to load mesh file {mesh_file}");
+                //return anyhow::Result::Err();
+                return Err(anyhow!("Failed to load mesh file: {}",e))
+            }
+        };
 
         let vertex_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -410,9 +416,9 @@ impl ObjMeshTest{
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.1,
-                        g: 0.8,
-                        b: 0.3,
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
                         a: 1.0,
                     }),
                     store: StoreOp::Store,

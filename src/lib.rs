@@ -46,6 +46,8 @@ struct State<'demo_lifetime> {
     camera_controller: nocmp::camera::CameraController,
     camera_uniform : nocmp::camera::CameraUniform,
     camera_uniform_buffer : wgpu::Buffer,
+    dancer : Vec<nocmp::obj_mesh_test::ObjMeshTest>,
+    dancer_frame : usize
 
 }
 
@@ -61,6 +63,14 @@ impl<'demo_lifetime> State<'demo_lifetime> {
         let elapsed = song_time.elapsed();
         let elapsed_millis = elapsed.as_millis();
         let is_beat = elapsed_millis % 469 <= 55;
+        let is_beat_x2 = elapsed_millis % (469/4) <= 60;
+
+        if is_beat_x2{
+            self.dancer_frame += 1;
+            if self.dancer_frame >= self.dancer.len() {
+                self.dancer_frame = 0;
+            }
+        }
         if  is_beat {
 
             self.toylike_uniforms.uniforms.iMouse[0] = self.window.inner_size().width as f32 * 0.5_f32;
@@ -216,9 +226,28 @@ impl<'demo_lifetime> State<'demo_lifetime> {
             &config,
             wgpu::include_wgsl!("shadertoys/obj_test.wgsl"),
             &camera_uniform_buffer,
-            &queue
+            &queue,
+            "art/dance_frames/dance_frames0334.obj"
         ).unwrap();
 
+        let mut dancer : Vec<nocmp::obj_mesh_test::ObjMeshTest> = Vec::new();
+        let mut dancer_frames = 334;
+        while(dancer_frames < 371){
+            let path : String = format!("art/dance_frames/dance_frames0{dancer_frames}.obj");
+
+            let dance_frame_mesh= nocmp::obj_mesh_test::ObjMeshTest::create(
+                &device,
+                &toylike_uniforms,
+                &texture_bind_group_layout,
+                &config,
+                wgpu::include_wgsl!("shadertoys/obj_test.wgsl"),
+                &camera_uniform_buffer,
+                &queue,
+                &*path
+            ).unwrap();
+            dancer.push(dance_frame_mesh);
+            dancer_frames+=1;
+        }
 
         Self{
             surface,
@@ -242,8 +271,9 @@ impl<'demo_lifetime> State<'demo_lifetime> {
             camera,
             camera_controller,
             camera_uniform,
-            camera_uniform_buffer
-
+            camera_uniform_buffer,
+            dancer,
+            dancer_frame : 0
         }
     }
 
@@ -279,19 +309,6 @@ impl<'demo_lifetime> State<'demo_lifetime> {
 
         self.camera_uniform.update_view_proj(&self.camera);
 
-        //self.camera_uniform.view_proj[0][0] =self.toylike_uniforms.uniforms.iTime.sin();
-        let mut i = 0;
-        while i < self.camera_uniform.view_proj[0].len()
-        {
-
-
-            println!("matrix!!");
-            println!("matrix {},{},{},{}",self.camera_uniform.view_proj[i][0],
-                     self.camera_uniform.view_proj[i][1],
-                     self.camera_uniform.view_proj[i][2],
-                     self.camera_uniform.view_proj[i][3]);
-           i+=1;
-        }
 
         self.queue.write_buffer(&self.camera_uniform_buffer,0,bytemuck::cast_slice(&[self.camera_uniform]));
     }
@@ -311,7 +328,9 @@ impl<'demo_lifetime> State<'demo_lifetime> {
         //This renders to screen with texture_bind_group , which is our POOC scroller texture which is y = 8k, and thus very squashed without a shader with texture coordinate hacks
         self.buffer_screen.render_to_screen(&view_of_surface,&self.texture_bind_group,&self.toylike_uniforms,&mut encoder);
 
-        self.obj_mesh_test.render_to_screen(&view_of_surface, &self.depth_texture.view, &self.texture_bind_group, &self.toylike_uniforms, &mut encoder);
+        //self.obj_mesh_test.render_to_screen(&view_of_surface, &self.depth_texture.view, &self.texture_bind_group, &self.toylike_uniforms, &mut encoder);
+        self.dancer.get_mut(self.dancer_frame).unwrap().render_to_screen(&view_of_surface, &self.depth_texture.view, &self.texture_bind_group, &self.toylike_uniforms, &mut encoder);
+
         //self.spline_test.render_to_screen(&view_of_surface,self.buffer_a.get_target_rtt_bindgroup(),&self.toylike_uniforms,&mut encoder,&self.queue);
 
         //submit will accept anythingthatimplements IntoIter
@@ -339,7 +358,7 @@ pub async fn run() {
     let source = Decoder::new(file).unwrap();
     // Play the sound directly on the device
 
-    //stream_handle.play_raw(source.convert_samples());
+    stream_handle.play_raw(source.convert_samples());
 
     let start_time = instant::Instant::now();
     let mut last_render_time = instant::Instant::now();

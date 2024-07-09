@@ -75,10 +75,12 @@ fn vs_main(
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 	var texSample : vec4<f32> = textureSample(t_diffuse,s_diffuse,in.uv);
+
+    let dutchColors: vec3<f32> = vec3<f32>(0.5) + vec3<f32>(0.5) * cos(uniforms.iTime + vec3<f32>(in.uv.x, in.uv.x, in.uv.x) + vec3<f32>(0.0, 2.0, 4.0));
 	var sun : vec3<f32> = vec3<f32>(-0.57,-0.57,0.57);
-	texSample.r = dot(in.normal,sun);
-	texSample.g = dot(in.normal,sun);
-	texSample.b = dot(in.normal,sun);
+	texSample.r = dot(in.normal,sun) * dutchColors.r;
+	texSample.g = dot(in.normal,sun) * dutchColors.g * uniforms.iMouse.z;
+	texSample.b = dot(in.normal,sun) * dutchColors.b;
 	texSample.a = 1.0;
 	return texSample;
 }
