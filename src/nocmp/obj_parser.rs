@@ -1,6 +1,7 @@
 use nalgebra::Vector3;
 use nalgebra::Vector2;
 use std::collections::HashMap;
+use std::error::Error;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
@@ -87,7 +88,7 @@ use std::io::{BufRead, BufReader};
 use bytemuck::{Pod, Zeroable};
 
 impl Mesh {
-    pub fn parse_from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn parse_from_file(path: &str) -> Result< HashMap<String,Mesh>, Box<dyn std::error::Error>> {
 
         //A good start, but it does not actually do anything with the smoothing group
         //And a Face here contains indices into each data array, i.e,
@@ -103,11 +104,14 @@ impl Mesh {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
 
+
+        let mut final_data: HashMap<String,Mesh> = HashMap::new();
         let mut vertices = Vec::new();
         let mut normals = Vec::new();
         let mut tex_coords = Vec::new();
         let mut faces = Vec::new();
         let mut current_smoothing_group = None;
+        let mut object_name : String = String::new();
 
         for line in reader.lines() {
             let line = line?;
@@ -118,6 +122,17 @@ impl Mesh {
             }
 
             match parts[0] {
+
+                "o" => {
+                    // object start
+                    if !vertices.is_empty(){
+                        let mesh = Self::create_realtime_mesh_from_loaded_data(&faces,&vertices,&normals,&tex_coords);
+                        final_data.insert(object_name,mesh.unwrap());
+                        faces.clear();
+                        current_smoothing_group = None;
+                    }
+                    object_name = String::from(parts[1]).clone();
+                }
                 "v" => {
                     // Vertex position
                     let x: f32 = parts[1].parse()?;
@@ -179,34 +194,44 @@ impl Mesh {
                 _ => {}
             }
         }
+        let mesh = Self::create_realtime_mesh_from_loaded_data(&faces,&vertices,&normals,&tex_coords);
+        final_data.insert(object_name,mesh.unwrap());
+        Ok(final_data)
+    }
+
+    pub fn create_realtime_mesh_from_loaded_data(faces : &Vec<MultiIndexingFace>,
+                                                 positions : &Vec<BVec3>,
+                                                 normals : &Vec<BVec3>,
+                                                 texture_coords : &Vec<BVec2>)
+                                                 -> Result<Self,Box<dyn std::error::Error>>{
 
         let mut realtime_vertices: Vec<Vertex> = Vec::new();
         let mut super_realtime_vertices: Vec<ObjLoaderRealtimeVertex> = Vec::new();
         let mut hits: HashMap<String,u32> = HashMap::new();
         let mut realtime_faces: Vec<u32> = Vec::new();
         let mut realtime_feces: Vec<Face> = Vec::new();
-        for face in &faces{
+        for face in faces{
 
             let mut i = 0;
             let mut new_face : Face = Face { face_indices: [0,0,0] };
             while i < face.vertices.len(){
                 let key: String = format!("{}/{}/{}",face.vertices[i],face.tex_coord_indices[i],face.normal_indices[i]);
                 match hits.get(&key){
-                   Some(index) => {
-                       realtime_faces.push(*index);
-                       new_face.face_indices[i] = *index as u32;
-                   },
+                    Some(index) => {
+                        realtime_faces.push(*index);
+                        new_face.face_indices[i] = *index as u32;
+                    },
                     None => {
 
                         //Collect all Vertex data
                         let vertex : Vertex = Vertex{
-                            position: vertices[face.vertices[i]],
+                            position: positions[face.vertices[i]],
                             normal: normals[face.normal_indices[i]],
-                            tex_coord: tex_coords[face.tex_coord_indices[i]],
+                            tex_coord: texture_coords[face.tex_coord_indices[i]],
                         };
 
                         let realtime_vertex : ObjLoaderRealtimeVertex = ObjLoaderRealtimeVertex {
-                           position : [vertex.position.0.x,vertex.position.0.y,vertex.position.0.z],
+                            position : [vertex.position.0.x,vertex.position.0.y,vertex.position.0.z],
                             normal : [vertex.normal.0.x,vertex.normal.0.y,vertex.normal.0.z],
                             uv : [vertex.tex_coord.0.x,vertex.tex_coord.0.y]
                         };
@@ -231,5 +256,6 @@ impl Mesh {
             real_verts: super_realtime_vertices,
 
         })
+
     }
 }

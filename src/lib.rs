@@ -1,5 +1,6 @@
 pub mod nocmp;
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::mem::size_of;
@@ -47,7 +48,8 @@ struct State<'demo_lifetime> {
     camera_uniform : nocmp::camera::CameraUniform,
     camera_uniform_buffer : wgpu::Buffer,
     dancer : Vec<nocmp::obj_mesh_test::ObjMeshTest>,
-    dancer_frame : usize
+    dancer_frame : usize,
+    meshes : HashMap<String, HashMap< String, nocmp::obj_parser::Mesh> >
 
 }
 
@@ -63,7 +65,7 @@ impl<'demo_lifetime> State<'demo_lifetime> {
         let elapsed = song_time.elapsed();
         let elapsed_millis = elapsed.as_millis();
         let is_beat = elapsed_millis % 469 <= 55;
-        let is_beat_x2 = elapsed_millis % (469/2) <= 60;
+        let is_beat_x2 = elapsed_millis % (469/4) <= 60;
 
         if is_beat_x2{
             self.dancer_frame += 1;
@@ -221,6 +223,10 @@ impl<'demo_lifetime> State<'demo_lifetime> {
             &camera_uniform_buffer,
         ).unwrap();
 
+        let mut meshes: HashMap<String, HashMap< String, nocmp::obj_parser::Mesh> > = HashMap::new();
+        meshes.insert("world".parse().unwrap(), nocmp::obj_parser::Mesh::parse_from_file("art/world.obj").unwrap());
+        meshes.insert("alphabet".parse().unwrap(), nocmp::obj_parser::Mesh::parse_from_file("art/alphabet/alphabet_.obj").unwrap());
+
         let obj_mesh_test = nocmp::obj_mesh_test::ObjMeshTest::create(
             &device,
             &toylike_uniforms,
@@ -229,14 +235,18 @@ impl<'demo_lifetime> State<'demo_lifetime> {
             wgpu::include_wgsl!("shadertoys/obj_test.wgsl"),
             &camera_uniform_buffer,
             &queue,
-            "art/dance_frames/dance_frames0334.obj"
+            &(meshes.get_key_value("alphabet").unwrap().1.get_key_value("z").unwrap().1)
         ).unwrap();
 
+
+
         let mut dancer : Vec<nocmp::obj_mesh_test::ObjMeshTest> = Vec::new();
+
         let mut dancer_frames = 334;
         while(dancer_frames < 371){
             let path : String = format!("art/dance_frames/dance_frames0{dancer_frames}.obj");
 
+            meshes.insert(path.parse().unwrap(), nocmp::obj_parser::Mesh::parse_from_file(path.as_str()).unwrap());
             let dance_frame_mesh= nocmp::obj_mesh_test::ObjMeshTest::create(
                 &device,
                 &toylike_uniforms,
@@ -245,7 +255,26 @@ impl<'demo_lifetime> State<'demo_lifetime> {
                 wgpu::include_wgsl!("shadertoys/obj_test.wgsl"),
                 &camera_uniform_buffer,
                 &queue,
-                &*path
+                &(meshes.get_key_value(&path).unwrap().1.get_key_value("Beta_Surface").unwrap().1)
+            ).unwrap();
+            dancer.push(dance_frame_mesh);
+            dancer_frames+=1;
+        }
+
+        let mut dancer_frames = 157;
+        while(dancer_frames <= 207){
+            let path : String = format!("art/2dance_frames/2dancer0{dancer_frames}.obj");
+
+            meshes.insert(path.parse().unwrap(), nocmp::obj_parser::Mesh::parse_from_file(path.as_str()).unwrap());
+            let dance_frame_mesh= nocmp::obj_mesh_test::ObjMeshTest::create(
+                &device,
+                &toylike_uniforms,
+                &texture_bind_group_layout,
+                &config,
+                wgpu::include_wgsl!("shadertoys/obj_test.wgsl"),
+                &camera_uniform_buffer,
+                &queue,
+                &(meshes.get_key_value(&path).unwrap().1.get_key_value("Beta_Surface").unwrap().1)
             ).unwrap();
             dancer.push(dance_frame_mesh);
             dancer_frames+=1;
@@ -275,7 +304,8 @@ impl<'demo_lifetime> State<'demo_lifetime> {
             camera_uniform,
             camera_uniform_buffer,
             dancer,
-            dancer_frame : 0
+            dancer_frame : 0,
+            meshes
         }
     }
 
@@ -328,10 +358,10 @@ impl<'demo_lifetime> State<'demo_lifetime> {
 
         
         //This renders to screen with texture_bind_group , which is our POOC scroller texture which is y = 8k, and thus very squashed without a shader with texture coordinate hacks
-        self.buffer_screen.render_to_screen(&view_of_surface,&self.texture_bind_group,&self.toylike_uniforms,&mut encoder);
+        //self.buffer_screen.render_to_screen(&view_of_surface,&self.texture_bind_group,&self.toylike_uniforms,&mut encoder);
 
-        //self.obj_mesh_test.render_to_screen(&view_of_surface, &self.depth_texture.view, &self.texture_bind_group, &self.toylike_uniforms, &mut encoder);
-        self.dancer.get_mut(self.dancer_frame).unwrap().render_to_screen(&view_of_surface, &self.depth_texture.view, &self.texture_bind_group, &self.toylike_uniforms, &mut encoder);
+        self.obj_mesh_test.render_to_screen(&view_of_surface, &self.depth_texture.view, &self.texture_bind_group, &self.toylike_uniforms, &mut encoder);
+        self.dancer.get_mut(self.dancer_frame).unwrap().render_to_screen_no_clear(&view_of_surface, &self.depth_texture.view, &self.texture_bind_group, &self.toylike_uniforms, &mut encoder);
 
         //self.spline_test.render_to_screen(&view_of_surface,self.buffer_a.get_target_rtt_bindgroup(),&self.toylike_uniforms,&mut encoder,&self.queue);
 
@@ -360,7 +390,7 @@ pub async fn run() {
     let source = Decoder::new(file).unwrap();
     // Play the sound directly on the device
 
-    stream_handle.play_raw(source.convert_samples());
+    //stream_handle.play_raw(source.convert_samples());
 
     let start_time = instant::Instant::now();
     let mut last_render_time = instant::Instant::now();
@@ -431,72 +461,4 @@ pub async fn run() {
             }
         }).unwrap();
 
-
-
-
-    /*
-    event_loop.run(move |event,  control_flow | match event {
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if window_id == state.window().id() => {
-                state.camera_controller.process_events(&event);
-                if !state.input(event) {
-                    match event {
-                        WindowEvent::CloseRequested
-                            | WindowEvent::KeyboardInput {
-                                event:
-                                    KeyEvent{
-                                        state: ElementState::Pressed,
-                                        physical_key : PhysicalKey::Code(KeyCode::Escape),
-                                        ..
-                                    },
-                                    ..
-                            } => *control_flow = ControlFlow::Exit,
-                            WindowEvent::Resized(physical_size) => {
-                                state.resize(*physical_size);
-                            }
-                        WindowEvent::CursorMoved {position,..} => {
-                            state.update_mousexy(position.x,position.y);
-                        }
-
-                        WindowEvent::MouseInput{state:element_state,button,..} => {
-                            //handle mouse input event...
-                            state.update_mouse_event(element_state,button);
-                        }
-
-                        WindowEvent::ScaleFactorChanged {new_inner_size,..} => {
-                            //new_inner_size is &&mut so we have to deref twice.
-                            state.resize(**new_inner_size);
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            Event::RedrawRequested(window_id) if window_id == state.window().id() => {
-                let now = instant::Instant::now();
-                let delta_time = now - last_render_time;
-
-
-                state.draw_sync_test(&start_time);
-                state.update(delta_time);
-                last_render_time = now;
-                match state.render() {
-                    Ok(_) => {}
-                    //reconfigure the surface if it's lost or outdated
-                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                        state.resize(state.size)
-                    }
-                    //System out of memory ooops.
-                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
-                }
-            }
-            Event::RedrawEventsCleared => {
-                //RedrawRequested willonly trigger once,unlesswemanually request it
-                state.window().request_redraw();
-           }
-            _=> {}
-        }
-    });*/
 }

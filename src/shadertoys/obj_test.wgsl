@@ -78,9 +78,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let dutchColors: vec3<f32> = vec3<f32>(0.5) + vec3<f32>(0.5) * cos(uniforms.iTime + vec3<f32>(in.uv.x, in.uv.x, in.uv.x) + vec3<f32>(0.0, 2.0, 4.0));
 	var sun : vec3<f32> = vec3<f32>(-0.57,-0.57,0.57);
-	texSample.r = dot(in.normal,sun) * dutchColors.r;
-	texSample.g = dot(in.normal,sun) * dutchColors.g * uniforms.iMouse.z;
-	texSample.b = dot(in.normal,sun) * dutchColors.b;
+	let otherSun : f32 = dot(in.normal,vec3<f32>(-0.57,0.57,0.57))*0.5;
+	let fog = pow(in.clip_position.z*0.5 +0.5,2.0);
+	texSample.r = dot(in.normal,sun) * dutchColors.r + dutchColors.r * otherSun;
+	texSample.g = dot(in.normal,sun) * dutchColors.g * uniforms.iMouse.z + dutchColors.g * otherSun;
+	texSample.b = dot(in.normal,sun) * dutchColors.b + dutchColors.b * otherSun;
+
+	texSample.r *= fog;
+	texSample.g *= fog;
+	texSample.b *= fog;
 	texSample.a = 1.0;
 	return texSample;
 }
