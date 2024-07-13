@@ -1,0 +1,28 @@
+So ....
+I wanted to create a demo for a long time.
+and I wanted to do it from scratch,
+in a new language - Rust.
+
+I told myself - get one little effect.
+Get a little sync going,
+and just finish the demo.
+
+When it comes to eliteness of the Demo,
+this is a prime example of something to be 
+ashamed of.
+
+The effect could probably run on a c64
+or Amiga. 
+
+It is huge in size.
+etc.
+
+but for this project - 
+and the motto of the NoCMP group
+it is all about creating 
+and not comparing yourself with others
+
+Create, Ship, Improve
+No Compare!
+
+Vame out!

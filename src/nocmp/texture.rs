@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::Read;
 use image::GenericImageView;
 use anyhow::*;
 use wgpu::Device;
@@ -17,6 +19,30 @@ impl Texture {
     ) -> Result<Self> {
         let img = image::load_from_memory(bytes)?;
         Self::from_image(device, queue, &img, Some(label))
+    }
+
+    pub fn from_path(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        path: &str,
+        label: &str,
+    ) -> Result<Self> {
+
+        println!("Opening Texture : {}",path);
+        let mut f = File::open(path).unwrap();
+        let mut buffer = Vec::new();
+        f.read_to_end(&mut buffer).expect("TODO: panic message");
+        let img = image::load_from_memory(buffer.as_slice())?;
+        Self::from_image(device, queue, &img, Some(label))
+        /*match f.read_to_end(&mut buffer) {
+            Ok(_)=> {
+
+
+            }
+
+        }
+        
+         */
     }
 
 

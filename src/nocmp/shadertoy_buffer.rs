@@ -208,7 +208,7 @@ impl ShaderToylikeBuffer{
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: surface_config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask:wgpu::ColorWrites::ALL,
                 })],
             }),
@@ -306,6 +306,38 @@ impl ShaderToylikeBuffer{
         //render_pass.draw(0..self.num_vertices,0..1);
     }
 
+    pub fn render_to_screen_without_clear(
+        self: &Self,
+        view: &wgpu::TextureView,
+        textures_group: &wgpu::BindGroup,
+        toylike_uniforms : &ShaderToyUniforms,
+        encoder: &mut wgpu::CommandEncoder
+    )
+    {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("My First Render Pass to RTT"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment{
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+
+
+        render_pass.set_pipeline(&self.render_pipeline);
+        //render_pass.set_bind_group(0,&self.uniform_bind_group,&[]);
+        render_pass.set_bind_group(0,&toylike_uniforms.uniform_bind_group,&[]);
+        render_pass.set_bind_group(1,textures_group,&[]);
+        render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint16);
+        render_pass.draw_indexed(0..self.num_indices,0,0..1);
+    }
     pub fn render_to_screen(
         self: &Self,
         view: &wgpu::TextureView,

@@ -12,7 +12,7 @@ use std::io::Read;
 use std::mem::size_of;
 use std::ops::Deref;
 use cgmath::SquareMatrix;
-use wgpu::{BindGroupLayoutDescriptor, Buffer, StoreOp};
+use wgpu::{BindGroupLayoutDescriptor, Buffer, Queue, StoreOp};
 use crate::nocmp::obj_parser::{Face, Mesh};
 use crate::nocmp::texture;
 
@@ -90,9 +90,11 @@ pub struct ObjMeshTest{
     num_indices: u32,
     material_uniforms : MaterialUniforms,
     material_uniform_buffer: wgpu::Buffer,
+    model_uniform_buffer: wgpu::Buffer,
     bind_group_0 : wgpu::BindGroup,
     bind_group_1 : wgpu::BindGroup,
     bind_group_2 : wgpu::BindGroup,
+    pub model_matrix : cgmath::Matrix4<f32>
 }
 
 impl ObjMeshTest{
@@ -396,9 +398,11 @@ impl ObjMeshTest{
             num_indices,
             material_uniforms,
             material_uniform_buffer,
+            model_uniform_buffer,
             bind_group_0,
             bind_group_1,
-            bind_group_2
+            bind_group_2,
+            model_matrix
         })
     }
 
@@ -455,6 +459,12 @@ impl ObjMeshTest{
         render_pass.set_vertex_buffer(0,self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..),wgpu::IndexFormat::Uint32);
         render_pass.draw_indexed(0..self.num_indices,0,0..1);
+    }
+
+    pub fn push_modelview(self: &mut Self, queue: &Queue){
+
+        let model_uniforms = ModelUniform{model_matrix : self.model_matrix.into() };
+        queue.write_buffer(&self.model_uniform_buffer,0,bytemuck::cast_slice(&[model_uniforms]));
     }
 
     pub fn render_to_screen(

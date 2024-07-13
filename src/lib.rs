@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::mem::size_of;
+use cgmath::num_traits::real::Real;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -19,7 +20,7 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 
 
 
-use winit::window::Window;
+use winit::window::{Fullscreen, Window};
 
 struct State<'demo_lifetime> {
     surface: wgpu::Surface<'demo_lifetime>,
@@ -37,6 +38,7 @@ struct State<'demo_lifetime> {
     depth_texture : nocmp::texture::Texture,
     texture_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group: wgpu::BindGroup,
+    fs_quad: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
     buffer_a: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
     buffer_b: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
     buffer_screen: nocmp::shadertoy_buffer::ShaderToylikeBuffer,
@@ -49,7 +51,8 @@ struct State<'demo_lifetime> {
     camera_uniform_buffer : wgpu::Buffer,
     dancer : Vec<nocmp::obj_mesh_test::ObjMeshTest>,
     dancer_frame : usize,
-    meshes : HashMap<String, HashMap< String, nocmp::obj_parser::Mesh> >
+    meshes : HashMap<String, HashMap< String, nocmp::obj_parser::Mesh> >,
+    textures: HashMap<String, wgpu::BindGroup>
 
 }
 
@@ -141,10 +144,63 @@ impl<'demo_lifetime> State<'demo_lifetime> {
             None,
         ).await.unwrap();
 
-        let dif_tex_1= nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("../art/scroll_test.png"),"testing").unwrap();
+        let dif_tex_1= nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("../art/logo.png"),"testing").unwrap();
         let dif_tex_2= nocmp::texture::Texture::from_bytes(&device,&queue,include_bytes!("diffuse.png"),"testing imagetest").unwrap();
 
         let (texture_bind_group_layout,texture_bind_group) = nocmp::texture::setup_texture_stage(&device, &[&dif_tex_1], Some("Just one texture")).unwrap();
+        let mut textures = HashMap::new();
+
+        //Loading up all textures
+
+
+        let mut message_frames = 11;
+        while message_frames >= 0{
+
+            let path : String = format!("art/message/frame_{message_frames}.png");
+            let (_,txbg) = nocmp::texture::setup_texture_stage(&device, &[&nocmp::texture::Texture::from_path(&device,&queue,
+                                                                                                               path.as_str(),"fingers crossed").unwrap()
+            ], Some("Just one texture")).unwrap();
+            textures.insert(format!("frame_{message_frames}").parse().unwrap(),txbg);
+            message_frames-=1;
+        }
+
+        let mut greet_frames= 14;
+        while greet_frames >= 0{
+
+            let path : String = format!("art/greets/greets_{greet_frames}.png");
+            let (_,txbg) = nocmp::texture::setup_texture_stage(&device, &[&nocmp::texture::Texture::from_path(&device,&queue,
+                                                                                                              path.as_str(),"fingers crossed").unwrap()
+            ], Some("Just one texture")).unwrap();
+            textures.insert(format!("greet_{greet_frames}").parse().unwrap(),txbg);
+            greet_frames-=1;
+        }
+
+        let mut refreng_frames= 3;
+        while refreng_frames >= 0{
+
+            let path : String = format!("art/refrence/refreng_{refreng_frames}.png");
+            let (_,txbg) = nocmp::texture::setup_texture_stage(&device, &[&nocmp::texture::Texture::from_path(&device,&queue,
+                                                                                                              path.as_str(),"fingers crossed").unwrap()
+            ], Some("Just one texture")).unwrap();
+            textures.insert(format!("refreng_{refreng_frames}").parse().unwrap(),txbg);
+            refreng_frames-=1;
+        }
+
+        let mut cred_frames= 6;
+        while cred_frames >= 0{
+
+            let path : String = format!("art/creds/creds_{cred_frames}.png");
+            let (_,txbg) = nocmp::texture::setup_texture_stage(&device, &[&nocmp::texture::Texture::from_path(&device,&queue,
+                                                                                                              path.as_str(),"fingers crossed").unwrap()
+            ], Some("Just one texture")).unwrap();
+            textures.insert(format!("creds_{cred_frames}").parse().unwrap(),txbg);
+            cred_frames-=1;
+        }
+
+        let (_,txbg) = nocmp::texture::setup_texture_stage(&device, &[&nocmp::texture::Texture::from_bytes(&device,&queue,
+                                                                                                           include_bytes!("../art/logo.png"),"fingers crossed").unwrap()
+        ], Some("Just one texture")).unwrap();
+        textures.insert("logo".parse().unwrap(),txbg);
 
         let surface_caps = surface.get_capabilities(&adapter);
 
@@ -195,6 +251,13 @@ impl<'demo_lifetime> State<'demo_lifetime> {
             wgpu::include_wgsl!("shadertoys/shader_buffer_screen.wgsl")
         ).unwrap();
 
+        let fs_quad = nocmp::shadertoy_buffer::ShaderToylikeBuffer::create(
+            &device,
+            &toylike_uniforms,
+            &texture_bind_group_layout,
+            &config,
+            wgpu::include_wgsl!("shadertoys/fs_quad.wgsl")
+        ).unwrap();
 
 
         let camera = nocmp::camera::Camera {
@@ -235,7 +298,7 @@ impl<'demo_lifetime> State<'demo_lifetime> {
             wgpu::include_wgsl!("shadertoys/obj_test.wgsl"),
             &camera_uniform_buffer,
             &queue,
-            &(meshes.get_key_value("alphabet").unwrap().1.get_key_value("z").unwrap().1)
+            &(meshes.get_key_value("world").unwrap().1.get_key_value("World").unwrap().1)
         ).unwrap();
 
 
@@ -280,6 +343,8 @@ impl<'demo_lifetime> State<'demo_lifetime> {
             dancer_frames+=1;
         }
 
+
+
         Self{
             surface,
             device,
@@ -305,7 +370,9 @@ impl<'demo_lifetime> State<'demo_lifetime> {
             camera_uniform_buffer,
             dancer,
             dancer_frame : 0,
-            meshes
+            meshes,
+            fs_quad,
+            textures
         }
     }
 
@@ -337,9 +404,12 @@ impl<'demo_lifetime> State<'demo_lifetime> {
         self.toylike_uniforms.push_buffer_to_gfx_card(&self.queue);
 
 
-        self.camera_controller.update_camera(&mut self.camera);
+        //self.camera_controller.update_camera(&mut self.camera);
+        //self.camera_uniform.update_view_proj(&self.camera);
 
-        self.camera_uniform.update_view_proj(&self.camera);
+        let x_sin = f32::sin(self.toylike_uniforms.uniforms.iTime*0.1) * 5.0;
+        //self.obj_mesh_test.model_matrix = cgmath::Matrix4::from_translation(cgmath::Vector3 { x: x_sin, y: f32::sin(self.toylike_uniforms.uniforms.iTime*3.0)*0.25, z: 0.0 });
+        self.obj_mesh_test.push_modelview(&self.queue);
 
 
         self.queue.write_buffer(&self.camera_uniform_buffer,0,bytemuck::cast_slice(&[self.camera_uniform]));
@@ -363,6 +433,160 @@ impl<'demo_lifetime> State<'demo_lifetime> {
         self.obj_mesh_test.render_to_screen(&view_of_surface, &self.depth_texture.view, &self.texture_bind_group, &self.toylike_uniforms, &mut encoder);
         self.dancer.get_mut(self.dancer_frame).unwrap().render_to_screen_no_clear(&view_of_surface, &self.depth_texture.view, &self.texture_bind_group, &self.toylike_uniforms, &mut encoder);
 
+
+
+        let time = self.toylike_uniforms.uniforms.iTime;
+        let time_ms = (time * 1000.0) as i32;
+
+        if(time > 0.0 && time < 7.0){
+
+
+            let beat_decay = 350;
+            let beat_decay_longer = 650;
+            let is_beat = time_ms % 469 <= beat_decay;
+            let is_beat_half = time_ms % (469*2) <= beat_decay;
+            if(is_beat_half){
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get("logo").unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+        }
+
+        let number_beats = time_ms / 469;
+        let number_beats_2x = time_ms / (469*2);
+        let mut camera_change =  (number_beats / 32)%4;
+
+        //camera_change = 3;
+        if(camera_change == 0){
+
+            self.camera.eye.x =  f32::sin(self.toylike_uniforms.uniforms.iTime*0.1 + 0.7) * 0.05;
+            self.camera.eye.y = f32::sin(self.toylike_uniforms.uniforms.iTime*0.1) * 0.2;
+            self.camera.eye.z =  f32::sin(self.toylike_uniforms.uniforms.iTime*0.1) * 0.05 + 2.0;
+
+            self.camera_uniform.update_view_proj(&self.camera);
+
+        }
+        if(camera_change == 1){
+
+            self.camera.eye.x = f32::sin(self.toylike_uniforms.uniforms.iTime*1.1) * 0.3;
+            self.camera.eye.y =  f32::cos(self.toylike_uniforms.uniforms.iTime*2.1) * 0.2 + 0.3;
+            self.camera.eye.z =  f32::sin(self.toylike_uniforms.uniforms.iTime*0.7) * 1.0 - 1.5;
+            self.camera_uniform.update_view_proj(&self.camera);
+
+        }
+        if(camera_change == 2){
+
+            self.camera.eye.x = f32::sin(self.toylike_uniforms.uniforms.iTime*5.1) * 0.3;
+            self.camera.eye.y =  f32::cos(self.toylike_uniforms.uniforms.iTime*2.1) * 0.2 + 0.3;
+            self.camera.eye.z =  f32::sin(self.toylike_uniforms.uniforms.iTime*5.7 + 0.3) * 0.5 + 2.5;
+            self.camera_uniform.update_view_proj(&self.camera);
+
+        }
+        if(camera_change == 3){
+
+            self.camera.eye.x = f32::sin(self.toylike_uniforms.uniforms.iTime*1.1) * 10.3;
+            self.camera.eye.y =  f32::cos(self.toylike_uniforms.uniforms.iTime*2.1) * 0.2 + 0.3;
+            self.camera.eye.z =  f32::cos(self.toylike_uniforms.uniforms.iTime*0.7) * 7.0 - 1.5;
+            self.camera_uniform.update_view_proj(&self.camera);
+
+        }
+
+
+        if(number_beats >= 16*4 && number_beats < 20*4){
+
+            let offset = 16*4;
+            let greet = (number_beats-offset) ;
+            if(greet < 15){
+                let greet_frame = format!("greet_{greet}");
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get(&greet_frame).unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+        }
+
+        if(number_beats >= 30 *4 && number_beats < 38*4){
+
+            let refreng= number_beats_2x % 4;
+            let refrenge_frame= format!("refreng_{refreng}");
+            self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get(&refrenge_frame).unwrap(),&self.toylike_uniforms,&mut encoder);
+        }
+
+        if(number_beats >= 40 *4 && number_beats < 41*4){
+
+            let creds_frame= format!("creds_0");
+            self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get(&creds_frame).unwrap(),&self.toylike_uniforms,&mut encoder);
+        }
+        if(number_beats >= 41 *4 && number_beats < 42*4){
+
+            let creds_frame= format!("creds_1");
+            self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get(&creds_frame).unwrap(),&self.toylike_uniforms,&mut encoder);
+        }
+        if(number_beats >= 42 *4 && number_beats < 43*4){
+
+            let creds_frame= format!("creds_2");
+            self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get(&creds_frame).unwrap(),&self.toylike_uniforms,&mut encoder);
+        }
+        if(number_beats >= 43 *4 && number_beats < 44*4){
+
+            let creds_frame= format!("creds_3");
+            self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get(&creds_frame).unwrap(),&self.toylike_uniforms,&mut encoder);
+        }
+        if(number_beats >= 44 *4 && number_beats < 45*4){
+
+            let creds_frame= format!("creds_4");
+            self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get(&creds_frame).unwrap(),&self.toylike_uniforms,&mut encoder);
+        }
+        if(number_beats >= 45 *4 && number_beats < 46*4){
+
+            let creds_frame= format!("creds_5");
+            self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get(&creds_frame).unwrap(),&self.toylike_uniforms,&mut encoder);
+        }
+        if(number_beats >= 46 *4 ){
+
+            let creds_frame= format!("creds_6");
+            self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get(&creds_frame).unwrap(),&self.toylike_uniforms,&mut encoder);
+        }
+
+
+        if(time > 7.43 && time < 15.0){
+
+            if(time > 7.582 && time < 7.869){
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get("frame_0").unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+            if(time > 7.869 && time < 8.777){
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get("frame_1").unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+            if(time > 8.777 && time < 9.339){
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get("frame_2").unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+            if(time > 9.339 && time < 10.293){
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get("frame_3").unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+            if(time > 10.293 && time < 10.670){
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get("frame_4").unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+            if(time > 10.670 && time < 12.161){
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get("frame_5").unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+            if(time > 12.161 && time < 12.763){
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get("frame_6").unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+            if(time > 12.763 && time < 13.349){
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get("frame_7").unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+            if(time > 13.349 && time < 13.634){
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get("frame_8").unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+            if(time > 13.634 && time < 13.832){
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get("frame_9").unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+            if(time > 13.832 && time < 14.150){
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get("frame_10").unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+            if(time > 14.150 && time < 114.150){
+                self.fs_quad.render_to_screen_without_clear(&view_of_surface,&self.textures.get("frame_11").unwrap(),&self.toylike_uniforms,&mut encoder);
+            }
+        }
+
+
+
+
         //self.spline_test.render_to_screen(&view_of_surface,self.buffer_a.get_target_rtt_bindgroup(),&self.toylike_uniforms,&mut encoder,&self.queue);
 
         //submit will accept anythingthatimplements IntoIter
@@ -376,26 +600,32 @@ impl<'demo_lifetime> State<'demo_lifetime> {
 pub async fn run() {
     env_logger::init();
     let event_loop = EventLoop::new().unwrap();
-    let window_size = Size::from(PhysicalSize::new(1024,1024));
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let window_size = Size::from(PhysicalSize::new(1920,1080));
+    let window = WindowBuilder::new()
+        .with_min_inner_size(window_size)
+        .with_fullscreen(Some(Fullscreen::Borderless(None))).build(&event_loop).unwrap();
+
+    window.set_cursor_visible(false);
+
+    let mut inited : bool = false;
+
+    let mut start_time = instant::Instant::now();
+    let mut last_render_time = instant::Instant::now();
 
 
 
-    //Try playing music..
-    // Get an output stream handle to the default physical sound device
+    let mut state = State::new(&window).await;
+
+    start_time = instant::Instant::now();
+    last_render_time = instant::Instant::now();
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
     // Load a sound from a file, using a path relative to Cargo.toml
-    let file = BufReader::new(File::open("art/track.wav").unwrap());
+    let file = BufReader::new(File::open("art/nsts.ogg").unwrap());
     // Decode that sound file into a source
     let source = Decoder::new(file).unwrap();
     // Play the sound directly on the device
 
-    //stream_handle.play_raw(source.convert_samples());
-
-    let start_time = instant::Instant::now();
-    let mut last_render_time = instant::Instant::now();
-
-    let mut state = State::new(&window).await;
+    stream_handle.play_raw(source.convert_samples());
     let mut surface_configured = false;
 
     event_loop
@@ -431,8 +661,11 @@ pub async fn run() {
                                 return;
                             }
 
+
+
                             let now = instant::Instant::now();
                             let delta_time = now - last_render_time;
+
 
 
                             state.draw_sync_test(&start_time);

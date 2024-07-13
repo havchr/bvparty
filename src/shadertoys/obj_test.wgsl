@@ -75,18 +75,28 @@ fn vs_main(
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 	var texSample : vec4<f32> = textureSample(t_diffuse,s_diffuse,in.uv);
+	let depth :f32 = in.clip_position.z / in.clip_position.w;
 
     let dutchColors: vec3<f32> = vec3<f32>(0.5) + vec3<f32>(0.5) * cos(uniforms.iTime + vec3<f32>(in.uv.x, in.uv.x, in.uv.x) + vec3<f32>(0.0, 2.0, 4.0));
 	var sun : vec3<f32> = vec3<f32>(-0.57,-0.57,0.57);
+
+	let first_sun : f32 = pow(dot(in.normal,sun),2.0)*1.8;
 	let otherSun : f32 = dot(in.normal,vec3<f32>(-0.57,0.57,0.57))*0.5;
-	let fog = pow(in.clip_position.z*0.5 +0.5,2.0);
-	texSample.r = dot(in.normal,sun) * dutchColors.r + dutchColors.r * otherSun;
-	texSample.g = dot(in.normal,sun) * dutchColors.g * uniforms.iMouse.z + dutchColors.g * otherSun;
-	texSample.b = dot(in.normal,sun) * dutchColors.b + dutchColors.b * otherSun;
+
+	let fog = 1.0 - pow(((depth*0.5 +0.5)) *0.1,2.1342);
+
+	texSample.r = first_sun * dutchColors.r + dutchColors.r * otherSun;
+	texSample.g = first_sun * dutchColors.g * uniforms.iMouse.z + dutchColors.g * otherSun;
+	texSample.b = first_sun * dutchColors.b + dutchColors.b * otherSun;
 
 	texSample.r *= fog;
 	texSample.g *= fog;
 	texSample.b *= fog;
+
+    let fog_plus = pow(fog,1.71212)*0.15;
+	texSample.r += fog_plus;
+	texSample.g += fog_plus;
+	texSample.b += fog_plus;
 	texSample.a = 1.0;
 	return texSample;
 }
