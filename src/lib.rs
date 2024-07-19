@@ -140,6 +140,7 @@ impl<'demo_lifetime> State<'demo_lifetime> {
                     wgpu::Limits::default()
                 },
                 label: None,
+                memory_hints: Default::default(),
             },
             None,
         ).await.unwrap();
@@ -601,9 +602,11 @@ pub async fn run() {
     env_logger::init();
     let event_loop = EventLoop::new().unwrap();
     let window_size = Size::from(PhysicalSize::new(1920,1080));
+    let window_size = Size::from(PhysicalSize::new(1920/2,1080/2));
     let window = WindowBuilder::new()
         .with_min_inner_size(window_size)
-        .with_fullscreen(Some(Fullscreen::Borderless(None))).build(&event_loop).unwrap();
+       // .with_fullscreen(Some(Fullscreen::Borderless(None)))
+        .build(&event_loop).unwrap();
 
     window.set_cursor_visible(false);
 
