@@ -5,6 +5,9 @@ use std::fs::File;
 use std::io::BufReader;
 use std::mem::size_of;
 use cgmath::num_traits::real::Real;
+use egui::FontDefinitions;
+use egui_wgpu_backend::RenderPass;
+use egui_winit_platform::{Platform, PlatformDescriptor};
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -618,6 +621,27 @@ pub async fn run() {
 
 
     let mut state = State::new(&window).await;
+
+
+    //todo - make the egui work
+    /*
+
+    // We use the egui_winit_platform crate as the platform.
+    let mut platform = Platform::new(PlatformDescriptor {
+        physical_width: window_size.to_physical(window.scale_factor()).width as u32,
+        physical_height: window_size.to_physical(window.scale_factor()).height as u32,
+        scale_factor: window.scale_factor(),
+        font_definitions: FontDefinitions::default(),
+        style: Default::default(),
+    });
+
+    // We use the egui_wgpu_backend crate as the render backend.
+    let mut egui_rpass = RenderPass::new(&state.device, state.config.format, 1);
+    // Display the demo application that ships with egui.
+    let mut demo_app = egui_demo_lib::DemoWindows::default();
+
+   //_________ end of todo
+     */
 
     start_time = instant::Instant::now();
     last_render_time = instant::Instant::now();
