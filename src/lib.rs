@@ -55,7 +55,7 @@ struct State<'demo_lifetime> {
     dancer : Vec<nocmp::obj_mesh_test::ObjMeshTest>,
     dancer_frame : usize,
     meshes : HashMap<String, HashMap< String, nocmp::obj_parser::Mesh> >,
-    textures: HashMap<String, wgpu::BindGroup>
+    textures: HashMap<String, wgpu::BindGroup>,
 
 }
 

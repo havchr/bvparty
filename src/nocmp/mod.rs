@@ -7,3 +7,4 @@ pub mod camera;
 pub mod bindgrouperoo;
 pub mod obj_parser;
 mod app_state;
+mod gui;
